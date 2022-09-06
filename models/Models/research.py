@@ -22,8 +22,8 @@ import yaml
 import torch.nn.functional as F
 from PIL import Image
 from torch.cuda import amp
-
-from utils.datasets import exif_transpose, letterbox
+from utils.dataloaders import exif_transpose
+from utils.datasets import letterbox
 from utils.general import (LOGGER, check_requirements, check_suffix, check_version, colorstr, increment_path,
                            make_divisible, non_max_suppression, scale_coords, xywh2xyxy, xyxy2xywh)
 from utils.plots import Annotator, colors,save_one_box
@@ -479,7 +479,7 @@ class Res(nn.Module):
 class ResX(Res):
     # ResNet bottleneck
     def __init__(self, c1, c2, shortcut=True, g=32, e=0.5):  # ch_in, ch_out, shortcut, groups, expansion
-        super().__init__(c1, c2, shortcu, g, e)
+        super().__init__(c1, c2, shortcut, g, e)
         c_ = int(c2 * e)  # hidden channels
 
 class InvolutionBottleneck(nn.Module):
@@ -3374,3 +3374,5 @@ class Conv6(nn.Module):
 
     def forward_fuse(self, x):
         return self.act(self.conv(x))
+
+

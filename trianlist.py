@@ -1,44 +1,46 @@
-# python train.py --cfg models\yolov5s_c3.yaml --device 0 --name yolov5s;
+# yolov5基准
+# python train.py --cfg models/hub_sly/yolov5s.yaml --device 1 --name s;
+# python train.py --cfg models/hub_sly/yolov5s-transformer.yaml --device 0 --name s_c3tr;
+
+# yolov5的4层检测
+# python train.py --cfg models/hub_sly/yolov5s-4h.yaml --device 1 --name s_4h;
+# python train.py --cfg models/hub_sly/yolov5s-4h-c3tr.yaml --device 1 --name s_4h_c3tr;
+
+# yoloface基准
+# python models/hub_sly/yolov5s-face.yaml --name s_face;
+# python models/hub_sly/yolov5s-facev2.yaml --name s_facev2;
+# python models/hub_sly/yolov5s-facev2-mul.yaml --name s_facev2_mul;
+
+# 新卷积
+# python train.py --cfg models/hub_sly/yolov5s-SPD-Conv.yaml --name s_GAMAttention;
+# python train.py --cfg models/hub_sly/yolov5s-gnconv.yaml --name s_gnconv;
+
+# 新结构-Hor
+# python train.py --cfg models/hub_sly/yolov5s-HorBlock.yaml  --name s_HorBlock;
+# python train.py --cfg models/hub_sly/yolov5s-HorNet.yaml --name s_HorNet;
+# python train.py --cfg models/hub_sly/yolov5s-C3HB.yaml  --name s_C3HB;
+
+# backbone结构修改
+# python train.py --cfg models/hub_sly/yolov5s-BoTNet.yaml --device 0 --name s_BoTNet;
+# python train.py --cfg models/hub_sly/yolov5s-CoTNet.yaml --device 0 --name s_CoTNet;
+# python train.py --cfg models/hub_sly/yolov5s-PicoDet.yaml --device 1 --name s_PicoDet;
+
+# ConvNeXt结合
+# python train.py --cfg models/hub_sly/yolov5s-CNeB.yaml --device 1 --name s_CNeB;
+# python train.py --cfg models/hub_sly/yolov5s-ConvNextBlock.yaml --device 1 --name s_ConvNextBlock;
+
+# CRAFE算子
+# python train.py --cfg models/hub_sly/yolov5s-CARAFE.yaml --name s_CARAFE;
+
+# 新轻量网络
+# python train.py --cfg models/hub_sly/yolov5s-MobileOneBlock.yaml --name s_MobileOneBlock;
+
+# 加注意力
+# python train.py --cfg models/hub_sly/yolov5s-GAMAttention.yaml --name s_GAMAttention;
+# python train.py --cfg models/hub_sly/yolov5s-S2Attention.yaml --name s_S2Attention;
+# python train.py --cfg models/hub_sly/yolov5s-SimAM.yaml --name s_SimAM;
+# python train.py --cfg models/hub_sly/yolov5s-SKAttention.yaml --name s_SKAttention;
+# python train.py --cfg models/hub_sly/yolov5s-SOCA.yaml --name s_SOCA;
+# python train.py --cfg models/hub_sly/yolov5s-ACmix.yaml --name s_ACmix;
 
 
-# (1)最新MobileOne结构换Backbone修改: yolov5_MobileOneBlock.yaml
-
-# (2)Swin Transformer结构的修改:models/hub_sly/yolov5s-swin-transformer.yaml
-# 出现RuntimeError: expected scalar type Half but found Float
-# 解决办法：
-# 1. train加个参数 使得opt.swin默认设置为false
-# 2.val.run调用的时候加个(half=opt.swin)传进去，因为val.py默认的half为True，要将其设置为false
-
-# (3)PicoDet结构的修改:models/hub_sly/yolov5s_PicoDet.yaml
-
-# (4)CotNet Transformer结构的修改 models/hub_sly/yolov5s_CoTNet.yaml
-# python train.py --cfg yolov5s_c3.yaml --device 0 --name yolov5s;
-
-# (6)修改Soft-NMS,Soft-CIoUNMS,Soft-SIoUNMS,Soft-DIoUNMS,Soft-EIoUNMS,Soft-GIoUNMS
-# 效果一般：在general.py文件中增加def soft_nms；
-# 在val.py将out = non_max_suppression替换为out = soft_nms
-# 在def soft_nms中，找到iou = bbox_iou替换为iou = bbox_iou(dc[0], dc[1:], CIoU=True)
-# 训练时使用了DIOU，detect时也需要改为DIOU？
-
-# (7)改进DIoU-NMS,SIoU-NMS,EIoU-NMS,CIoU-NMS,GIoU-NMS
-# 1.改为：Merge-NMS:YOLOv5代码中直接打开即可,general.py文件下的merge = False替换为merge = True即可
-# 2.改为：Soft-NMS
-# 3.其他：NMS:在general.py文件中加入NMS方法其次
-# 将non_max_suppression方法中的
-# i = torchvision.ops.nms(boxes, scores, iou_thres),改为i = NMS(boxes, scores, iou_thres, class_nms='xxx')class_nms='DIoU'
-
-# (8)增加ACmix结构的修改,自注意力和卷积集成:models/hub_sly/yolov5s-ACmix.yaml
-# 出现RuntimeError: Input type (torch.cuda.FloatTensor) and weight type (torch.cuda.HalfTensor) should be the same
-# 解决办法：1.train加个参数parser.add_argument('--acmix', action='store_true', help='useacmix')
-# 2.val.run调用的时候加个(half=not opt.acmix)传进去，因为val.py默认的half为True，要将其设置为false。
-
-# (9)BoTNet Transformer结构的修改:models/hub_sly/yolov5s-BoTNet.yaml
-# (10)最新HorNet结合YOLO应用首发！ | ECCV2022出品，多种搭配，即插即用 | Backbone主干、递归门控卷积的高效高阶空间交互
-# 1.在YOLOv5中 使用 gnconv模块 示例 models/hub_sly/yolov5s-gnconv.yaml
-# 2.在YOLOv5中 使用 HorBlock模块 示例 models/hub_sly/yolov5s-HorBlock.yaml
-# 3.在YOLOv5中 使用 HorNet主干网络 示例 models/hub_sly/yolov5s-HorNet.yaml
-# 4.在YOLOv5中 使用 新增C3HB结构 示例 models/hub_sly/yolov5s-C3HB.yaml
-
-# (10) ConvNeXt结合YOLO | CVPR2022 多种搭配，即插即用 | Backbone主干CNN模型
-# 1.在YOLOv5中 使用 CNeB 模块 示例 models/hub_sly/yolov5s-CNeB.yaml
-# 2.在YOLOv5中 使用 ConvNeXtBlock 模块 示例 models/hub_sly/yolov5s-ConvNextBlock.yaml

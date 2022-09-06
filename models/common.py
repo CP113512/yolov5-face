@@ -34,8 +34,9 @@ from utils.general import (LOGGER, ROOT, Profile, check_requirements, check_suff
                            make_divisible, non_max_suppression, scale_coords, xywh2xyxy, xyxy2xywh,yaml_load)
 # from utils.plots import Annotator, colors, save_one_box
 # from utils.torch_utils import copy_attr, smart_inference_mode, time_sync
-from models.Models.FaceV2 import MultiSEAM, C3RFEM, SEAM
-from models.Models.research import CARAFE, MP, SPPCSPC, RepConv, BoT3, \
+from models.Detect.MuitlHead import *
+from models.Models.FaceV2 import SEAM, RFEM, C3RFEM, ConvMixer, MultiSEAM
+from models.Models.research import CARAFE, MP, SPPCSPC, RepConv, BoT3,\
     PatchEmbed, SwinTransformer_Layer, LayerNorm, CA, CBAM, Concat_bifpn, Involution, \
         Stem, ResCSPC, ResCSPB, ResXCSPC, ResXCSPB, BottleneckCSPB, BottleneckCSPC
 from models.Models.Litemodel import CBH, ES_Bottleneck, DWConvblock, ADD, RepVGGBlock, LC_Block, \

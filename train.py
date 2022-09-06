@@ -60,16 +60,16 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     results_file = save_dir / 'results.txt'
 
     # Save run settings
-    with open(save_dir / 'hyp.yaml', 'w') as f:
+    with open(save_dir / 'hyp.yaml', 'w',encoding='UTF-8') as f:
         yaml.dump(hyp, f, sort_keys=False)
-    with open(save_dir / 'opt.yaml', 'w') as f:
+    with open(save_dir / 'opt.yaml', 'w',encoding='UTF-8') as f:
         yaml.dump(vars(opt), f, sort_keys=False)
 
     # Configure
     plots = not opt.evolve  # create plots
     cuda = device.type != 'cpu'
     init_seeds(2 + rank)
-    with open(opt.data) as f:
+    with open(opt.data,encoding='UTF-8') as f:
         data_dict = yaml.load(f, Loader=yaml.FullLoader)  # data dict
     with torch_distributed_zero_first(rank):
         check_dataset(data_dict)  # check
@@ -133,12 +133,12 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     lf = lambda x: ((1 + math.cos(x * math.pi / epochs)) / 2) * (1 - hyp['lrf']) + hyp['lrf']  # cosine
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
     # plot_lr_scheduler(optimizer, scheduler, epochs)
-
+    # wandb.init(project="yolo-sly", entity="slyteagirl") D:\帅璐宇\Tea\result
     # Logging
     if wandb and wandb.run is None:
         opt.hyp = hyp  # add hyperparameters
         wandb_run = wandb.init(config=opt, resume="allow",
-                               project='YOLOv5' if opt.project == 'runs/train' else Path(opt.project).stem,
+                               project='yolo-sly' if opt.project == 'runs/train' else Path(opt.project).stem,
                                name=save_dir.stem,
                                id=ckpt.get('wandb_id') if 'ckpt' in locals() else None)
     loggers = {'wandb': wandb}  # loggers dict
@@ -153,7 +153,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
 
         # Results
         if ckpt.get('training_results') is not None:
-            with open(results_file, 'w') as file:
+            with open(results_file, 'w',encoding='UTF-8') as file:
                 file.write(ckpt['training_results'])  # write results.txt
 
         # Epochs
@@ -351,7 +351,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
                                                  log_imgs=opt.log_imgs if wandb else 0)
 
             # Write
-            with open(results_file, 'a') as f:
+            with open(results_file, 'a',encoding='UTF-8') as f:
                 f.write(s + '%10.4g' * 7 % results + '\n')  # P, R, mAP@.5, mAP@.5-.95, val_loss(box, obj, cls)
             if len(opt.name) and opt.bucket:
                 os.system('gsutil cp %s gs://%s/results/results%s.txt' % (results_file, opt.bucket, opt.name))
@@ -387,7 +387,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
             # Save model
             save = (not opt.nosave) or (final_epoch and not opt.evolve)
             if save:
-                with open(results_file, 'r') as f:  # create checkpoint
+                with open(results_file, 'r',encoding='UTF-8') as f:  # create checkpoint
                     ckpt = {'epoch': epoch,
                             'best_fitness': best_fitness,
                             'training_results': f.read(),
@@ -446,13 +446,15 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     return results
 
 
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default='weights/yolov5s.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='models/yolov5s.yaml', help='model.yaml path')
     parser.add_argument('--data', type=str, default='data/voc_tea.yaml', help='data.yaml path')
     parser.add_argument('--hyp', type=str, default='data/hyp.scratch.yaml', help='hyperparameters path')
-    parser.add_argument('--epochs', type=int, default=500)
+    parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs')
     parser.add_argument('--img-size', nargs='+', type=int, default=[640, 640], help='[train, test] image sizes')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
@@ -473,7 +475,7 @@ if __name__ == '__main__':
     parser.add_argument('--log-imgs', type=int, default=16, help='number of images for W&B logging, max 100')
     parser.add_argument('--log-artifacts', action='store_true', help='log artifacts, i.e. final trained model')
     parser.add_argument('--workers', type=int, default=8, help='maximum number of dataloader workers')
-    parser.add_argument('--project', default='runs/train', help='save to project/name')
+    parser.add_argument('--project', default=r"D:\帅璐宇\Tea\result\runs\yolo-sly", help='save to project/name') #'runs/train' D:\帅璐宇\Tea\result\runs\train
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     # -----------------------sly
@@ -494,7 +496,7 @@ if __name__ == '__main__':
     if opt.resume:  # resume an interrupted run
         ckpt = opt.resume if isinstance(opt.resume, str) else get_latest_run()  # specified or most recent path
         assert os.path.isfile(ckpt), 'ERROR: --resume checkpoint does not exist'
-        with open(Path(ckpt).parent.parent / 'opt.yaml') as f:
+        with open(Path(ckpt).parent.parent / 'opt.yaml',encoding='UTF-8') as f:
             opt = argparse.Namespace(**yaml.load(f, Loader=yaml.FullLoader))  # replace
         opt.cfg, opt.weights, opt.resume = '', ckpt, True
         logger.info('Resuming training from %s' % ckpt)
@@ -517,7 +519,7 @@ if __name__ == '__main__':
         opt.batch_size = opt.total_batch_size // opt.world_size
 
     # Hyperparameters
-    with open(opt.hyp) as f:
+    with open(opt.hyp,encoding='UTF-8') as f:
         hyp = yaml.load(f, Loader=yaml.FullLoader)  # load hyps
         if 'box' not in hyp:
             warn('Compatibility: %s missing "box" which was renamed from "giou" in %s' %
