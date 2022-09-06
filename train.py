@@ -138,7 +138,8 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     if wandb and wandb.run is None:
         opt.hyp = hyp  # add hyperparameters
         wandb_run = wandb.init(config=opt, resume="allow",
-                               project='yolo-sly' if opt.project == 'runs/train' else Path(opt.project).stem,
+                               project='yolo-cpsly',
+                               entity= 'cp-sly',
                                name=save_dir.stem,
                                id=ckpt.get('wandb_id') if 'ckpt' in locals() else None)
     loggers = {'wandb': wandb}  # loggers dict
@@ -475,7 +476,7 @@ if __name__ == '__main__':
     parser.add_argument('--log-imgs', type=int, default=16, help='number of images for W&B logging, max 100')
     parser.add_argument('--log-artifacts', action='store_true', help='log artifacts, i.e. final trained model')
     parser.add_argument('--workers', type=int, default=8, help='maximum number of dataloader workers')
-    parser.add_argument('--project', default=r"D:\帅璐宇\Tea\result\runs\yolo-sly", help='save to project/name') #'runs/train' D:\帅璐宇\Tea\result\runs\train
+    parser.add_argument('--project', default=r"runs\train", help='save to project/name') #'runs/train' D:\帅璐宇\Tea\result\runs\train
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     # -----------------------sly
