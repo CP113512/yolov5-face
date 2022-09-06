@@ -36,7 +36,11 @@ def test(data,
          save_hybrid=False,  # for hybrid auto-labelling
          save_conf=False,  # save auto-label confidences
          plots=True,
+        # ----------sly
+        # half=opt.swin,
+        # half=not opt.acmix, False
          log_imgs=0):  # number of logged images
+
 
     # Initialize/load model and set device
     training = model is not None
@@ -119,6 +123,8 @@ def test(data,
             t = time_synchronized()
             #output = non_max_suppression(inf_out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb)
             output = non_max_suppression_face(inf_out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb)
+            # ---------------sly
+            # output = soft_nms(out, conf_thres, iou_thres, multi_label=True)
             t1 += time_synchronized() - t
 
         # Statistics per image

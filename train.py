@@ -476,6 +476,10 @@ if __name__ == '__main__':
     parser.add_argument('--project', default='runs/train', help='save to project/name')
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
+    # -----------------------sly
+    # parser.add_argument('--swin', half=not opt.swin, help='useswin')
+    # parser.add_argument('--acmix', action='store_true', help='useacmix')
+
     opt = parser.parse_args()
 
     # Set DDP variables

@@ -15,22 +15,94 @@ import numpy as np
 import torch
 import torchvision
 import yaml
+import platform
+import contextlib
+import pkg_resources as pkg
+from fontTools.subset import intersect
 
 from utils.google_utils import gsutil_getsize
 from utils.metrics import fitness
 from utils.torch_utils import init_torch_seeds
 
 # Settings
+
+FILE = Path(__file__).resolve()
+ROOT = FILE.parents[1]  # YOLOv5 root directory
+RANK = int(os.getenv('RANK', -1))
+
+DATASETS_DIR = ROOT.parent / 'datasets'  # YOLOv5 datasets directory
+NUM_THREADS = min(8, max(1, os.cpu_count() - 1))  # number of YOLOv5 multiprocessing threads
+AUTOINSTALL = str(os.getenv('YOLOv5_AUTOINSTALL', True)).lower() == 'true'  # global auto-install mode
+VERBOSE = str(os.getenv('YOLOv5_VERBOSE', True)).lower() == 'true'  # global verbose mode
+FONT = 'Arial.ttf'  # https://ultralytics.com/assets/Arial.ttf
+
+
 torch.set_printoptions(linewidth=320, precision=5, profile='long')
 np.set_printoptions(linewidth=320, formatter={'float_kind': '{:11.5g}'.format})  # format short g, %precision=5
 cv2.setNumThreads(0)  # prevent OpenCV from multithreading (incompatible with PyTorch DataLoader)
 os.environ['NUMEXPR_MAX_THREADS'] = str(min(os.cpu_count(), 8))  # NumExpr max threads
+os.environ['OMP_NUM_THREADS'] = '1' if platform.system() == 'darwin' else str(NUM_THREADS)  # OpenMP (PyTorch and SciPy)
 
 
 def set_logging(rank=-1):
     logging.basicConfig(
         format="%(message)s",
         level=logging.INFO if rank in [-1, 0] else logging.WARN)
+
+set_logging()  # run before defining LOGGER
+LOGGER = logging.getLogger("yolov5")  # define globally (used in train.py, val.py, detect.py, etc.)
+if platform.system() == 'Windows':
+    for fn in LOGGER.info, LOGGER.warning:
+        setattr(LOGGER, fn.__name__, lambda x: fn(emojis(x)))  # emoji safe logging
+
+def emojis(str=''):
+    # Return platform-dependent emoji-safe version of string
+    return str.encode().decode('ascii', 'ignore') if platform.system() == 'Windows' else str
+
+def check_suffix(file='yolov5s.pt', suffix=('.pt',), msg=''):
+    # Check file(s) for acceptable suffix
+    if file and suffix:
+        if isinstance(suffix, str):
+            suffix = [suffix]
+        for f in file if isinstance(file, (list, tuple)) else [file]:
+            s = Path(f).suffix.lower()  # file suffix
+            if len(s):
+                assert s in suffix, f"{msg}{f} acceptable suffix is {suffix}"
+
+def yaml_load(file='data.yaml'):
+    # Single-line safe yaml loading
+    with open(file, errors='ignore') as f:
+        return yaml.safe_load(f)
+
+
+def check_version(current='0.0.0', minimum='0.0.0', name='version ', pinned=False, hard=False, verbose=False):
+    # Check version vs. required version
+    current, minimum = (pkg.parse_version(x) for x in (current, minimum))
+    result = (current == minimum) if pinned else (current >= minimum)  # bool
+    s = f'WARNING: ⚠️ {name}{minimum} is required by YOLOv5, but {name}{current} is currently installed'  # string
+    if hard:
+        assert result, emojis(s)  # assert min requirements met
+    if verbose and not result:
+        LOGGER.warning(s)
+    return result
+class Profile(contextlib.ContextDecorator):
+    # YOLOv5 Profile class. Usage: @Profile() decorator or 'with Profile():' context manager
+    def __init__(self, t=0.0):
+        self.t = t
+        self.cuda = torch.cuda.is_available()
+
+    def __enter__(self):
+        self.start = self.time()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.dt = self.time() - self.start  # delta-time
+        self.t += self.dt  # accumulate dt
+
+    def time(self):
+        if self.cuda:
+            torch.cuda.synchronize()
+        return time.time()
 
 
 def init_seeds(seed=0):
@@ -446,6 +518,13 @@ def non_max_suppression_face(prediction, conf_thres=0.25, iou_thres=0.45, classe
         c = x[:, 17:18] * (0 if agnostic else max_wh)  # classes
         boxes, scores = x[:, :4] + c, x[:, 4]  # boxes (offset by class), scores
         i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
+        # -----------------sly
+        # i = NMS(boxes, scores, iou_thres, class_nms='xxx')
+        # i = NMS(boxes, scores, iou_thres, class_nms='DIoU')
+        # i = NMS(boxes, scores, iou_thres, class_nms='GIoU')
+        # i = NMS(boxes, scores, iou_thres, class_nms='CIoU')
+        # i = NMS(boxes, scores, iou_thres, class_nms='EIoU')
+        # i = NMS(boxes, scores, iou_thres, class_nms='SIoU')
         #if i.shape[0] > max_det:  # limit detections
         #    i = i[:max_det]
         if merge and (1 < n < 3E3):  # Merge NMS (boxes merged using weighted mean)
@@ -538,6 +617,13 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
         c = x[:, 5:6] * (0 if agnostic else max_wh)  # classes
         boxes, scores = x[:, :4] + c, x[:, 4]  # boxes (offset by class), scores
         i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
+        # -----------------sly
+        # i = NMS(boxes, scores, iou_thres, class_nms='xxx')
+        # i = NMS(boxes, scores, iou_thres, class_nms='DIoU')
+        # i = NMS(boxes, scores, iou_thres, class_nms='GIoU')
+        # i = NMS(boxes, scores, iou_thres, class_nms='CIoU')
+        # i = NMS(boxes, scores, iou_thres, class_nms='EIoU')
+        # i = NMS(boxes, scores, iou_thres, class_nms='SIoU')
         #if i.shape[0] > max_det:  # limit detections
         #    i = i[:max_det]
         if merge and (1 < n < 3E3):  # Merge NMS (boxes merged using weighted mean)
@@ -651,3 +737,110 @@ def increment_path(path, exist_ok=True, sep=''):
         i = [int(m.groups()[0]) for m in matches if m]  # indices
         n = max(i) + 1 if i else 2  # increment number
         return f"{path}{sep}{n}"  # update path
+
+# New------sly---------------------------
+# NMS、Soft-NMS、Soft-SIoUNMS、Soft-CIoUNMS、Soft-DIoUNMS、Soft-EIoUNMS、Soft-GIoUNMS
+# (1)Soft-NMS
+def soft_nms(prediction, conf_thres=0.25, iou_thres=0.45, multi_label=False):
+    """Runs Non-Maximum Suppression (NMS) on inference results
+
+    Returns:
+         list of detections, on (n,6) tensor per image [xyxy, conf, cls]
+    """
+
+    nc = prediction.shape[2] - 5  # number of classes
+
+    # Checks
+    assert 0 <= conf_thres <= 1, f'Invalid Confidence threshold {conf_thres}, valid values are between 0.0 and 1.0'
+    assert 0 <= iou_thres <= 1, f'Invalid IoU {iou_thres}, valid values are between 0.0 and 1.0'
+
+    # Settings
+    min_wh, max_wh = 2, 4096  # (pixels) minimum and maximum box width and height
+    time_limit = 10.0  # seconds to quit after
+
+    multi_label &= nc > 1  # multiple labels per box (adds 0.5ms/img)
+    soft_nms = True
+
+    t = time.time()
+    output = [torch.zeros((0, 6), device=prediction.device)] * prediction.shape[0]
+    for xi, x in enumerate(prediction):  # image index, image inference
+        x = x[x[:, 4] > conf_thres]  # confidence
+        x = x[(x[:, 2:4] > min_wh).all(1) & (x[:, 2:4] < max_wh).all(1)]
+        if len(x) == 0:
+            continue
+        # Compute conf
+        x[:, 5:] *= x[:, 4:5]  # conf = obj_conf * cls_conf
+        # Box (center x, center y, width, height) to (x1, y1, x2, y2)
+        box = xywh2xyxy(x[:, :4])
+        # Detections matrix nx6 (xyxy, conf, cls)
+        if multi_label:
+            i, j = (x[:, 5:] > conf_thres).nonzero(as_tuple=False).T
+            x = torch.cat((box[i], x[i, j + 5].unsqueeze(1), j.float().unsqueeze(1)), 1)
+        else:  # best class only
+            conf, j = x[:, 5:].max(1)
+            x = torch.cat((box, conf.unsqueeze(1), j.float().unsqueeze(1)), 1)[conf.view(-1) > conf_thres]
+        if len(x) == 0:
+            continue
+        x = x[x[:, 4].argsort(descending=True)]  # sort by confidence
+        # Batched NMS
+        det_max = []
+        cls = x[:, -1]   # classes
+        for c in cls.unique():
+            dc = x[cls == c]
+            n = len(dc)
+            #print(n)
+            if n == 1:
+                det_max.append(dc)
+                continue
+            elif n > 30000:
+                dc = dc[:30000]
+            if soft_nms:
+                sigma = 0.5
+                while len(dc):
+                    det_max.append(dc[:1])
+                    if len(dc) == 1:
+                        break
+                    iou = bbox_iou(dc[0], dc[1:]) # 修改
+                    # ---------sly
+                    # iou = bbox_iou(dc[0], dc[1:], CIoU=True)
+                    # iou = bbox_iou(dc[0], dc[1:], DIoU=True)
+                    # iou = bbox_iou(dc[0], dc[1:], EIoU=True)
+                    # iou = bbox_iou(dc[0], dc[1:], SIoU=True)
+                    # iou = bbox_iou(dc[0], dc[1:], GIoU=True)
+                    dc = dc[1:]
+                    dc[:, 4] *= torch.exp(-iou ** 2 / sigma)
+                    dc = dc[dc[:, 4] > conf_thres]
+        if len(det_max):
+            det_max = torch.cat(det_max)
+            #output[xi] = det_max[(-det_max[:, 4]).argsort()]
+            output[xi] = det_max[(-det_max[:, 4]).argsort()]
+        if (time.time() - t) > time_limit:
+            print(f'WARNING: NMS time limit {time_limit}s exceeded')
+            break  # time limit exceeded
+    return output
+
+# New------sly---------------------------
+# 改进DIoU-NMS,SIoU-NMS,EIoU-NMS,CIoU-NMS,GIoU-NMS
+def NMS(boxes, scores, iou_thres, class_nms='CIoU'):
+    # class_nms=class_nms
+    GIoU=CIoU=DIoU=EIoU=SIoU=False
+    if class_nms == 'CIoU':
+        CIoU=True
+    elif class_nms == 'DIoU':
+        DIoU=True
+    elif class_nms == 'GIoU':
+        GIoU=True
+    elif class_nms == 'EIoU':
+        EIoU=True
+    else :
+        SIoU=True
+    B = torch.argsort(scores, dim=-1, descending=True)
+    keep = []
+    while B.numel() > 0:
+        index = B[0]
+        keep.append(index)
+        if B.numel() == 1: break
+        iou = bbox_iou(boxes[index, :], boxes[B[1:], :], GIoU=GIoU, DIoU=DIoU, CIoU=CIoU, EIoU=EIoU, SIoU=SIoU)
+        inds = torch.nonzero(iou <= iou_thres).reshape(-1)
+        B = B[inds + 1]
+    return torch.tensor(keep)
