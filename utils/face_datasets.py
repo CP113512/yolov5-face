@@ -319,9 +319,9 @@ class LoadFaceImagesAndLabels(Dataset):  # for training/testing
                     np.array(x[:, 7] > 0, dtype=np.int32) - 1)
                 labels[:, 8] = np.array(x[:, 8] > 0, dtype=np.int32) * (ratio[1] * h * x[:, 8] + pad[1]) + (
                     np.array(x[:, 8] > 0, dtype=np.int32) - 1)
-                labels[:, 9] = np.array(x[:, 5] > 0, dtype=np.int32) * (ratio[0] * w * x[:, 9] + pad[0]) + (
+                labels[:, 9] = np.array(x[:, 9] > 0, dtype=np.int32) * (ratio[0] * w * x[:, 9] + pad[0]) + (
                     np.array(x[:, 9] > 0, dtype=np.int32) - 1)
-                labels[:, 10] = np.array(x[:, 5] > 0, dtype=np.int32) * (ratio[1] * h * x[:, 10] + pad[1]) + (
+                labels[:, 10] = np.array(x[:, 10] > 0, dtype=np.int32) * (ratio[1] * h * x[:, 10] + pad[1]) + (
                     np.array(x[:, 10] > 0, dtype=np.int32) - 1)
                 labels[:, 11] = np.array(x[:, 11] > 0, dtype=np.int32) * (ratio[0] * w * x[:, 11] + pad[0]) + (
                     np.array(x[:, 11] > 0, dtype=np.int32) - 1)
