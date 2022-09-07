@@ -8,8 +8,8 @@
 
 # yoloface基准
 # python train.py --cfg models/hub_sly/yolov5s-face.yaml --name s_face;
-# python train.py --cfg models/hub_sly/yolov5s-facev2.yaml --name s_facev2;
-# python train.py --cfg models/hub_sly/yolov5s-facev2-mul.yaml --name s_facev2_mul;
+# python train.py --cfg models/hub_sly/yolov5s-facev2.yaml --name s_facev2;######################
+# python train.py --cfg models/hub_sly/yolov5s-facev2-mul.yaml --name s_facev2_mul;#######################
 
 # 新卷积
 # python train.py --cfg models/hub_sly/yolov5s-SPD-Conv.yaml --name s_GAMAttention --device 0;
@@ -17,7 +17,7 @@
 
 # 新结构-Hor
 # python train.py --cfg models/hub_sly/yolov5s-HorBlock.yaml  --name s_HorBlock --device 0;
-# python train.py --cfg models/hub_sly/yolov5s-HorNet.yaml --name s_HorNet;###############
+# python train.py --cfg models/hub_sly/yolov5s-HorNet.yaml --name s_HorNet;
 # python train.py --cfg models/hub_sly/yolov5s-C3HB.yaml  --name s_C3HB --device 0;
 
 # backbone结构修改
@@ -41,6 +41,6 @@
 # python train.py --cfg models/hub_sly/yolov5s-SimAM.yaml --name s_SimAM --device 0;
 # python train.py --cfg models/hub_sly/yolov5s-SKAttention.yaml --name s_SKAttention --device 0;
 # python train.py --cfg models/hub_sly/yolov5s-SOCA.yaml --name s_SOCA --device 0;
-# python train.py --cfg models/hub_sly/yolov5s-ACmix.yaml --name s_ACmix --device 0;
+# python train.py --cfg models/hub_sly/yolov5s-ACmix.yaml --name s_ACmix --device 0;#########################
 
 
