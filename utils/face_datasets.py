@@ -488,9 +488,9 @@ def load_mosaic_face(self, index):
             labels[:, 13] = np.array(x[:, 13] > 0, dtype=np.int32) * (w * x[:, 13] + padw) + (np.array(x[:, 13] > 0, dtype=np.int32) - 1)
             labels[:, 14] = np.array(x[:, 14] > 0, dtype=np.int32) * (h * x[:, 14] + padh) + (np.array(x[:, 14] > 0, dtype=np.int32) - 1)
             #---------------------------------------------
-            labels[:, 15] = np.array(x[:, 15] > 0, dtype=np.int32) * (w * x[:, 13] + padw) + (
+            labels[:, 15] = np.array(x[:, 15] > 0, dtype=np.int32) * (w * x[:, 15] + padw) + (
                         np.array(x[:, 15] > 0, dtype=np.int32) - 1)
-            labels[:, 16] = np.array(x[:, 16] > 0, dtype=np.int32) * (h * x[:, 14] + padh) + (
+            labels[:, 16] = np.array(x[:, 16] > 0, dtype=np.int32) * (h * x[:, 16] + padh) + (
                         np.array(x[:, 16] > 0, dtype=np.int32) - 1)
         labels4.append(labels)
 
