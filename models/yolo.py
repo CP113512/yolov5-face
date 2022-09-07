@@ -237,7 +237,7 @@ class Model(nn.Module):
             if type(m) is Conv and hasattr(m, 'bn'):
                 m.conv = fuse_conv_and_bn(m.conv, m.bn)  # update conv
                 delattr(m, 'bn')  # remove batchnorm
-                m.forward = m.fuseforward  # update forward
+                m.forward = m.forward_fuse  # update forward
             elif type(m) is nn.Upsample:
                 m.recompute_scale_factor = None  # torch 1.11.0 compatibility
         self.info()
