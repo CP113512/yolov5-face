@@ -3,6 +3,9 @@
 wandb
 widerface_evaluate
 runs
-data/images/*
+data\images\result
+data\images
+
+
 voc_tea.yaml/
 

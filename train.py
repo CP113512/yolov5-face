@@ -36,7 +36,7 @@ from utils.plots import plot_images, plot_labels, plot_results, plot_evolution
 from utils.torch_utils import ModelEMA, select_device, intersect_dicts, torch_distributed_zero_first
 
 logger = logging.getLogger(__name__)
-# os.environ['WANDB_MODE'] = 'offline'
+os.environ['WANDB_MODE'] = 'offline'
 
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
@@ -363,17 +363,14 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
                     'val/box_loss', 'val/obj_loss', 'val/cls_loss',  # val loss
                     'x/lr0', 'x/lr1', 'x/lr2']  # params
             if (results[0] > best_precision):
-                wandb.log({"best_precision": results[0]})
                 best_precision = results[0]
             if (results[1] > best_recall):
-                wandb.log({"best_recall": results[0]})
                 best_recall = results[1]
             if (results[2] > best_mAP):
-                wandb.log({"best_mAP": results[0]})
                 best_mAP = results[2]
             if (results[3] > best_mAP95):
-                wandb.log({"best_mAP95": results[0]})
                 best_mAP95 = results[3]
+            wandb.log({"best_precision": best_precision,"best_recall": best_recall,"best_mAP": best_mAP, "best_mAP95": best_mAP95})
             for x, tag in zip(list(mloss[:-1]) + list(results) + lr, tags):
                 if tb_writer:
                     tb_writer.add_scalar(tag, x, epoch)  # tensorboard
