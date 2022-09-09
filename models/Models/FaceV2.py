@@ -215,8 +215,8 @@ class ConvMixer(nn.Module):
 class SEAM(nn.Module):
     def __init__(self, c1, c2, n, reduction=16):
         super(SEAM, self).__init__()
-        if c1 != c2:
-            c2 = c1
+        # if c1 != c2:
+        #     c2 = c1
         self.DCovN = nn.Sequential(
             # nn.Conv2d(c1, c2, kernel_size=3, stride=1, padding=1, groups=c1),
             # nn.GELU(),
@@ -250,9 +250,9 @@ class SEAM(nn.Module):
 
 def DcovN(c1, c2, depth, kernel_size=3, patch_size=3):
     dcovn = nn.Sequential(
-        nn.Conv2d(c1, c2, kernel_size=patch_size, stride=patch_size),
-        nn.GELU(),
-        nn.BatchNorm2d(c2),
+        # nn.Conv2d(c1, c2, kernel_size=patch_size, stride=patch_size),
+        # nn.GELU(),
+        # nn.BatchNorm2d(c2),
         *[nn.Sequential(
             Residual(nn.Sequential(
                 nn.Conv2d(in_channels=c2, out_channels=c2, kernel_size=kernel_size, stride=1, padding=1, groups=c2),
@@ -269,8 +269,8 @@ def DcovN(c1, c2, depth, kernel_size=3, patch_size=3):
 class MultiSEAM(nn.Module):
     def __init__(self, c1, c2, depth, kernel_size=3, patch_size=[3, 5, 7], reduction=16):
         super(MultiSEAM, self).__init__()
-        if c1 != c2:
-            c2 = c1
+        # if c1 != c2:
+        #     c2 = c1
         self.DCovN0 = DcovN(c1, c2, depth, kernel_size=kernel_size, patch_size=patch_size[0])
         self.DCovN1 = DcovN(c1, c2, depth, kernel_size=kernel_size, patch_size=patch_size[1])
         self.DCovN2 = DcovN(c1, c2, depth, kernel_size=kernel_size, patch_size=patch_size[2])

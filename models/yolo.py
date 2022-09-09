@@ -355,7 +355,8 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
                 n = 1
         elif m in [ReOrg, DWT]:
             c2 = ch[f] * 4
-        elif m in [S2Attention, SimSPPF, ACmix, CrissCrossAttention, SOCA, ShuffleAttention, SEAttention, SimAM,
+        # ACmix,
+        elif m in [S2Attention, SimSPPF,  CrissCrossAttention, SOCA, ShuffleAttention, SEAttention, SimAM,
                    SKAttention]:
             c1, c2 = ch[f], args[0]
             if c2 != no:  # if not output
