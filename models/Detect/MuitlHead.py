@@ -23,125 +23,264 @@ from utils.torch_utils import (fuse_conv_and_bn, initialize_weights, model_info,
 # from utils.loss import SigmoidBin
 
 
-class Decoupled_Detect(nn.Module):
-    stride = None  # strides computed during build
-    onnx_dynamic = False  # ONNX export parameter
-    export = False  # export mode
-
-    def __init__(self, nc=80, anchors=(), ch=(), inplace=True):  # detection layer
-        super().__init__()
-      
-        self.nc = nc  # number of classes
-        self.no = nc + 5  # number of outputs per anchor
-        self.nl = len(anchors)  # number of detection layers
-        self.na = len(anchors[0]) // 2  # number of anchors
-        self.grid = [torch.zeros(1)] * self.nl  # init grid
-        self.anchor_grid = [torch.zeros(1)] * self.nl  # init anchor grid
-        self.register_buffer('anchors', torch.tensor(anchors).float().view(self.nl, -1, 2))  # shape(nl,na,2)      
-        self.m=nn.ModuleList(DecoupledHead(x,nc,anchors) for x in ch) 
-        self.inplace = inplace  # use in-place ops (e.g. slice assignment)
-        
-        
-    def forward(self, x):
-        z = []  # inference output
-        for i in range(self.nl):
-            x[i] = self.m[i](x[i])  # conv 
-            bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
-            x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
-
-            if not self.training:  # inference
-                if self.onnx_dynamic or self.grid[i].shape[2:4] != x[i].shape[2:4]:
-                    self.grid[i], self.anchor_grid[i] = self._make_grid(nx, ny, i)
-
-                y = x[i].sigmoid()
-                if self.inplace:
-                    y[..., 0:2] = (y[..., 0:2] * 2 + self.grid[i]) * self.stride[i]  # xy
-                    y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
-                else:  # for YOLOv5 on AWS Inferentia https://github.com/ultralytics/yolov5/pull/2953
-                    xy, wh, conf = y.split((2, 2, self.nc + 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
-                    xy = (xy * 2 + self.grid[i]) * self.stride[i]  # xy
-                    wh = (wh * 2) ** 2 * self.anchor_grid[i]  # wh
-                    y = torch.cat((xy, wh, conf), 4)
-                z.append(y.view(bs, -1, self.no))
-
-        return x if self.training else (torch.cat(z, 1),) if self.export else (torch.cat(z, 1), x)
-        
-    def _make_grid(self, nx=20, ny=20, i=0):
-        d = self.anchors[i].device
-        t = self.anchors[i].dtype
-        shape = 1, self.na, ny, nx, 2  # grid shape
-        y, x = torch.arange(ny, device=d, dtype=t), torch.arange(nx, device=d, dtype=t)
-        if check_version(torch.__version__, '1.10.0'):  # torch>=1.10.0 meshgrid workaround for torch>=0.7 compatibility
-            yv, xv = torch.meshgrid(y, x, indexing='ij')
-        else:
-            yv, xv = torch.meshgrid(y, x)
-        grid = torch.stack((xv, yv), 2).expand(shape) - 0.5  # add grid offset, i.e. y = 2.0 * x - 0.5
-        anchor_grid = (self.anchors[i] * self.stride[i]).view((1, self.na, 1, 1, 2)).expand(shape)
-        return grid, anchor_grid
-
-class ASFF_Detect(nn.Module):   #add ASFFV5 layer and Rfb 
-    stride = None  # strides computed during build
-    onnx_dynamic = False  # ONNX export parameter
-    export = False  # export mode
-
-    def __init__(self, nc=80, anchors=(), ch=(), multiplier=0.5,rfb=False,inplace=True):  # detection layer
-        super().__init__()
-        self.nc = nc  # number of classes
-        self.no = nc + 5  # number of outputs per anchor
-        self.nl = len(anchors)  # number of detection layers
-        self.na = len(anchors[0]) // 2  # number of anchors
-        self.grid = [torch.zeros(1)] * self.nl  # init grid
-        self.l0_fusion = ASFFV5(level=0, multiplier=multiplier,rfb=rfb)
-        self.l1_fusion = ASFFV5(level=1, multiplier=multiplier,rfb=rfb)
-        self.l2_fusion = ASFFV5(level=2, multiplier=multiplier,rfb=rfb)
-        self.anchor_grid = [torch.zeros(1)] * self.nl  # init anchor grid
-        self.register_buffer('anchors', torch.tensor(anchors).float().view(self.nl, -1, 2))  # shape(nl,na,2)
-        self.m = nn.ModuleList(nn.Conv2d(x, self.no * self.na, 1) for x in ch)  # output conv
-        self.inplace = inplace  # use in-place ops (e.g. slice assignment)
-
-    def forward(self, x):
-        z = []  # inference output
-        result=[]
-       
-        result.append(self.l2_fusion(x))
-        result.append(self.l1_fusion(x))
-        result.append(self.l0_fusion(x))
-        x=result      
-        for i in range(self.nl):
-            x[i] = self.m[i](x[i])  # conv
-            bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
-            x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
-
-            if not self.training:  # inference
-                if self.onnx_dynamic or self.grid[i].shape[2:4] != x[i].shape[2:4]:
-                    self.grid[i], self.anchor_grid[i] = self._make_grid(nx, ny, i)
-
-                y = x[i].sigmoid() # https://github.com/iscyy/yoloair
-                if self.inplace:
-                    y[..., 0:2] = (y[..., 0:2] * 2 + self.grid[i]) * self.stride[i]  # xy
-                    y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
-                else:  # for YOLOv5 on AWS Inferentia https://github.com/ultralytics/yolov5/pull/2953
-                    xy, wh, conf = y.split((2, 2, self.nc + 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
-                    xy = (xy * 2 + self.grid[i]) * self.stride[i]  # xy
-                    wh = (wh * 2) ** 2 * self.anchor_grid[i]  # wh
-                    y = torch.cat((xy, wh, conf), 4)
-                z.append(y.view(bs, -1, self.no))
-
-        return x if self.training else (torch.cat(z, 1),) if self.export else (torch.cat(z, 1), x)
-    
-    def _make_grid(self, nx=20, ny=20, i=0):
-        d = self.anchors[i].device
-        t = self.anchors[i].dtype
-        shape = 1, self.na, ny, nx, 2  # grid shape
-        y, x = torch.arange(ny, device=d, dtype=t), torch.arange(nx, device=d, dtype=t)
-        if check_version(torch.__version__, '1.10.0'):  # torch>=1.10.0 meshgrid workaround for torch>=0.7 compatibility
-            yv, xv = torch.meshgrid(y, x, indexing='ij')
-        else:
-            yv, xv = torch.meshgrid(y, x)
-        grid = torch.stack((xv, yv), 2).expand(shape) - 0.5  # add grid offset, i.e. y = 2.0 * x - 0.5
-        anchor_grid = (self.anchors[i] * self.stride[i]).view((1, self.na, 1, 1, 2)).expand(shape)
-        #print(anchor_grid)
-        return grid, anchor_grid
+# class DecoupledHead(nn.Module):
+#     def __init__(self, ch=256, nc=80, anchors=()):
+#         super().__init__()
+#         self.nc = nc  # number of classes
+#         self.nl = len(anchors)  # number of detection layers
+#         self.na = len(anchors[0]) // 2  # number of anchors
+#         self.merge = Conv(ch, 256, 1, 1)
+#         self.cls_convs1 = Conv(256, 256, 3, 1, 1)
+#         self.cls_convs2 = Conv(256, 256, 3, 1, 1)
+#         self.reg_convs1 = Conv(256, 256, 3, 1, 1)
+#         self.reg_convs2 = Conv(256, 256, 3, 1, 1)
+#         self.cls_preds = nn.Conv2d(256, self.nc * self.na, 1)
+#         self.reg_preds = nn.Conv2d(256, 4 * self.na, 1)
+#         self.obj_preds = nn.Conv2d(256, 1 * self.na, 1)
+#
+#     def forward(self, x):
+#         x = self.merge(x)
+#         x1 = self.cls_convs1(x)
+#         x1 = self.cls_convs2(x1)
+#         x1 = self.cls_preds(x1)
+#         x2 = self.reg_convs1(x)
+#         x2 = self.reg_convs2(x2)
+#         x21 = self.reg_preds(x2)
+#         x22 = self.obj_preds(x2)
+#         out = torch.cat([x21, x22, x1], 1)
+#         return out
+#
+#
+# class ASFFV5(nn.Module):
+#     def __init__(self, level, multiplier=1, rfb=False, vis=False, act_cfg=True):
+#         """
+#         ASFF version for YoloV5 .
+#         different than YoloV3
+#         multiplier should be 1, 0.5
+#         which means, the channel of ASFF can be
+#         512, 256, 128 -> multiplier=1
+#         256, 128, 64 -> multiplier=0.5
+#         For even smaller, you need change code manually.
+#         """
+#         super(ASFFV5, self).__init__()
+#         self.level = level
+#         self.dim = [int(1024 * multiplier), int(512 * multiplier),
+#                     int(256 * multiplier)]
+#         # print(self.dim)
+#
+#         self.inter_dim = self.dim[self.level]
+#         if level == 0:
+#             self.stride_level_1 = Conv(int(512 * multiplier), self.inter_dim, 3, 2)
+#
+#             self.stride_level_2 = Conv(int(256 * multiplier), self.inter_dim, 3, 2)
+#
+#             self.expand = Conv(self.inter_dim, int(
+#                 1024 * multiplier), 3, 1)
+#         elif level == 1:
+#             self.compress_level_0 = Conv(
+#                 int(1024 * multiplier), self.inter_dim, 1, 1)
+#             self.stride_level_2 = Conv(
+#                 int(256 * multiplier), self.inter_dim, 3, 2)
+#             self.expand = Conv(self.inter_dim, int(512 * multiplier), 3, 1)
+#         elif level == 2:
+#             self.compress_level_0 = Conv(
+#                 int(1024 * multiplier), self.inter_dim, 1, 1)
+#             self.compress_level_1 = Conv(
+#                 int(512 * multiplier), self.inter_dim, 1, 1)
+#             self.expand = Conv(self.inter_dim, int(
+#                 256 * multiplier), 3, 1)
+#
+#         # when adding rfb, we use half number of channels to save memory
+#         compress_c = 8 if rfb else 16
+#         self.weight_level_0 = Conv(
+#             self.inter_dim, compress_c, 1, 1)
+#         self.weight_level_1 = Conv(
+#             self.inter_dim, compress_c, 1, 1)
+#         self.weight_level_2 = Conv(
+#             self.inter_dim, compress_c, 1, 1)
+#
+#         self.weight_levels = Conv(
+#             compress_c * 3, 3, 1, 1)
+#         self.vis = vis
+#
+#     def forward(self, x):  # l,m,s
+#         """
+#         # 128, 256, 512
+#         512, 256, 128
+#         from small -> large
+#         """
+#         x_level_0 = x[2]  # l
+#         x_level_1 = x[1]  # m
+#         x_level_2 = x[0]  # s
+#         # print('x_level_0: ', x_level_0.shape)
+#         # print('x_level_1: ', x_level_1.shape)
+#         # print('x_level_2: ', x_level_2.shape)
+#         if self.level == 0:
+#             level_0_resized = x_level_0
+#             level_1_resized = self.stride_level_1(x_level_1)
+#             level_2_downsampled_inter = F.max_pool2d(
+#                 x_level_2, 3, stride=2, padding=1)
+#             level_2_resized = self.stride_level_2(level_2_downsampled_inter)
+#         elif self.level == 1:
+#             level_0_compressed = self.compress_level_0(x_level_0)
+#             level_0_resized = F.interpolate(
+#                 level_0_compressed, scale_factor=2, mode='nearest')
+#             level_1_resized = x_level_1
+#             level_2_resized = self.stride_level_2(x_level_2)
+#         elif self.level == 2:
+#             level_0_compressed = self.compress_level_0(x_level_0)
+#             level_0_resized = F.interpolate(
+#                 level_0_compressed, scale_factor=4, mode='nearest')
+#             x_level_1_compressed = self.compress_level_1(x_level_1)
+#             level_1_resized = F.interpolate(
+#                 x_level_1_compressed, scale_factor=2, mode='nearest')
+#             level_2_resized = x_level_2
+#
+#         # print('level: {}, l1_resized: {}, l2_resized: {}'.format(self.level,
+#         #      level_1_resized.shape, level_2_resized.shape))
+#         level_0_weight_v = self.weight_level_0(level_0_resized)
+#         level_1_weight_v = self.weight_level_1(level_1_resized)
+#         level_2_weight_v = self.weight_level_2(level_2_resized)
+#         # print('level_0_weight_v: ', level_0_weight_v.shape)
+#         # print('level_1_weight_v: ', level_1_weight_v.shape)
+#         # print('level_2_weight_v: ', level_2_weight_v.shape)
+#
+#         levels_weight_v = torch.cat(
+#             (level_0_weight_v, level_1_weight_v, level_2_weight_v), 1)
+#         levels_weight = self.weight_levels(levels_weight_v)
+#         levels_weight = F.softmax(levels_weight, dim=1)
+#
+#         fused_out_reduced = level_0_resized * levels_weight[:, 0:1, :, :] + \
+#                             level_1_resized * levels_weight[:, 1:2, :, :] + \
+#                             level_2_resized * levels_weight[:, 2:, :, :]
+#
+#         out = self.expand(fused_out_reduced)
+#
+#         if self.vis:
+#             return out, levels_weight, fused_out_reduced.sum(dim=1)
+#         else:
+#             return out
+#
+#
+# class Decoupled_Detect(nn.Module):
+#     stride = None  # strides computed during build
+#     onnx_dynamic = False  # ONNX export parameter
+#     export = False  # export mode
+#
+#     def __init__(self, nc=80, anchors=(), ch=(), inplace=True):  # detection layer
+#         super().__init__()
+#
+#         self.nc = nc  # number of classes
+#         self.no = nc + 5  # number of outputs per anchor
+#         self.nl = len(anchors)  # number of detection layers
+#         self.na = len(anchors[0]) // 2  # number of anchors
+#         self.grid = [torch.zeros(1)] * self.nl  # init grid
+#         self.anchor_grid = [torch.zeros(1)] * self.nl  # init anchor grid
+#         self.register_buffer('anchors', torch.tensor(anchors).float().view(self.nl, -1, 2))  # shape(nl,na,2)
+#         self.m=nn.ModuleList(DecoupledHead(x,nc,anchors) for x in ch)
+#         self.inplace = inplace  # use in-place ops (e.g. slice assignment)
+#
+#
+#     def forward(self, x):
+#         z = []  # inference output
+#         for i in range(self.nl):
+#             x[i] = self.m[i](x[i])  # conv
+#             bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
+#             x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
+#
+#             if not self.training:  # inference
+#                 if self.onnx_dynamic or self.grid[i].shape[2:4] != x[i].shape[2:4]:
+#                     self.grid[i], self.anchor_grid[i] = self._make_grid(nx, ny, i)
+#
+#                 y = x[i].sigmoid()
+#                 if self.inplace:
+#                     y[..., 0:2] = (y[..., 0:2] * 2 + self.grid[i]) * self.stride[i]  # xy
+#                     y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
+#                 else:  # for YOLOv5 on AWS Inferentia https://github.com/ultralytics/yolov5/pull/2953
+#                     xy, wh, conf = y.split((2, 2, self.nc + 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
+#                     xy = (xy * 2 + self.grid[i]) * self.stride[i]  # xy
+#                     wh = (wh * 2) ** 2 * self.anchor_grid[i]  # wh
+#                     y = torch.cat((xy, wh, conf), 4)
+#                 z.append(y.view(bs, -1, self.no))
+#
+#         return x if self.training else (torch.cat(z, 1),) if self.export else (torch.cat(z, 1), x)
+#
+#     def _make_grid(self, nx=20, ny=20, i=0):
+#         d = self.anchors[i].device
+#         t = self.anchors[i].dtype
+#         shape = 1, self.na, ny, nx, 2  # grid shape
+#         y, x = torch.arange(ny, device=d, dtype=t), torch.arange(nx, device=d, dtype=t)
+#         if check_version(torch.__version__, '1.10.0'):  # torch>=1.10.0 meshgrid workaround for torch>=0.7 compatibility
+#             yv, xv = torch.meshgrid(y, x, indexing='ij')
+#         else:
+#             yv, xv = torch.meshgrid(y, x)
+#         grid = torch.stack((xv, yv), 2).expand(shape) - 0.5  # add grid offset, i.e. y = 2.0 * x - 0.5
+#         anchor_grid = (self.anchors[i] * self.stride[i]).view((1, self.na, 1, 1, 2)).expand(shape)
+#         return grid, anchor_grid
+#
+# class ASFF_Detect(nn.Module):   #add ASFFV5 layer and Rfb
+#     stride = None  # strides computed during build
+#     onnx_dynamic = False  # ONNX export parameter
+#     export = False  # export mode
+#
+#     def __init__(self, nc=80, anchors=(), ch=(), multiplier=0.5,rfb=False,inplace=True):  # detection layer
+#         super().__init__()
+#         self.nc = nc  # number of classes
+#         self.no = nc + 5  # number of outputs per anchor
+#         self.nl = len(anchors)  # number of detection layers
+#         self.na = len(anchors[0]) // 2  # number of anchors
+#         self.grid = [torch.zeros(1)] * self.nl  # init grid
+#         self.l0_fusion = ASFFV5(level=0, multiplier=multiplier,rfb=rfb)
+#         self.l1_fusion = ASFFV5(level=1, multiplier=multiplier,rfb=rfb)
+#         self.l2_fusion = ASFFV5(level=2, multiplier=multiplier,rfb=rfb)
+#         self.anchor_grid = [torch.zeros(1)] * self.nl  # init anchor grid
+#         self.register_buffer('anchors', torch.tensor(anchors).float().view(self.nl, -1, 2))  # shape(nl,na,2)
+#         self.m = nn.ModuleList(nn.Conv2d(x, self.no * self.na, 1) for x in ch)  # output conv
+#         self.inplace = inplace  # use in-place ops (e.g. slice assignment)
+#
+#     def forward(self, x):
+#         z = []  # inference output
+#         result=[]
+#
+#         result.append(self.l2_fusion(x))
+#         result.append(self.l1_fusion(x))
+#         result.append(self.l0_fusion(x))
+#         x=result
+#         for i in range(self.nl):
+#             x[i] = self.m[i](x[i])  # conv
+#             bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
+#             x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
+#
+#             if not self.training:  # inference
+#                 if self.onnx_dynamic or self.grid[i].shape[2:4] != x[i].shape[2:4]:
+#                     self.grid[i], self.anchor_grid[i] = self._make_grid(nx, ny, i)
+#
+#                 y = x[i].sigmoid() # https://github.com/iscyy/yoloair
+#                 if self.inplace:
+#                     y[..., 0:2] = (y[..., 0:2] * 2 + self.grid[i]) * self.stride[i]  # xy
+#                     y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
+#                 else:  # for YOLOv5 on AWS Inferentia https://github.com/ultralytics/yolov5/pull/2953
+#                     xy, wh, conf = y.split((2, 2, self.nc + 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
+#                     xy = (xy * 2 + self.grid[i]) * self.stride[i]  # xy
+#                     wh = (wh * 2) ** 2 * self.anchor_grid[i]  # wh
+#                     y = torch.cat((xy, wh, conf), 4)
+#                 z.append(y.view(bs, -1, self.no))
+#
+#         return x if self.training else (torch.cat(z, 1),) if self.export else (torch.cat(z, 1), x)
+#
+#     def _make_grid(self, nx=20, ny=20, i=0):
+#         d = self.anchors[i].device
+#         t = self.anchors[i].dtype
+#         shape = 1, self.na, ny, nx, 2  # grid shape
+#         y, x = torch.arange(ny, device=d, dtype=t), torch.arange(nx, device=d, dtype=t)
+#         if check_version(torch.__version__, '1.10.0'):  # torch>=1.10.0 meshgrid workaround for torch>=0.7 compatibility
+#             yv, xv = torch.meshgrid(y, x, indexing='ij')
+#         else:
+#             yv, xv = torch.meshgrid(y, x)
+#         grid = torch.stack((xv, yv), 2).expand(shape) - 0.5  # add grid offset, i.e. y = 2.0 * x - 0.5
+#         anchor_grid = (self.anchors[i] * self.stride[i]).view((1, self.na, 1, 1, 2)).expand(shape)
+#         #print(anchor_grid)
+#         return grid, anchor_grid
 
 class IDetect(nn.Module):
     stride = None  # strides computed during build

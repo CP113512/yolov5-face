@@ -17,7 +17,7 @@ from utils.autoanchor import check_anchor_order
 from utils.general import make_divisible, check_file, set_logging
 from utils.torch_utils import time_synchronized, fuse_conv_and_bn, model_info, scale_img, initialize_weights, \
     select_device, copy_attr
-
+from utils.plots import *
 try:
     import thop  # for FLOPS computation
 except ImportError:
@@ -46,6 +46,8 @@ class Detect(nn.Module):
     def forward(self, x):
         # x = x.copy()  # for profiling
         z = []  # inference output
+        # ---sly热力图可视化
+        logits_ = []
         if self.export_cat:
             for i in range(self.nl):
                 x[i] = self.m[i](x[i])  # conv
@@ -89,6 +91,9 @@ class Detect(nn.Module):
                 if self.grid[i].shape[2:4] != x[i].shape[2:4]:
                     self.grid[i] = self._make_grid(nx, ny).to(x[i].device)
 
+                # ---sly热力图可视化
+                logits = x[i][..., 5:]
+
                 y = torch.full_like(x[i], 0)
                 # --------------------------------------
                 class_range = list(range(5)) + list(range(17,17+self.nc))
@@ -116,8 +121,10 @@ class Detect(nn.Module):
                 #y[..., 13:15] = (y[..., 13:15] * 2 -1) * self.anchor_grid[i]  # landmark x5 y5
 
                 z.append(y.view(bs, -1, self.no))
+                # ---sly热力图可视化
+                logits_.append(logits.view(bs, -1, self.no-5))
 
-        return x if self.training else (torch.cat(z, 1), x)
+        return x if self.training else (torch.cat(z, 1), torch.cat(logits_, 1), x)
 
     @staticmethod
     def _make_grid(nx=20, ny=20):
@@ -163,13 +170,47 @@ class Model(nn.Module):
             self.stride = m.stride
             self._initialize_biases()  # only run once
             # print('Strides: %s' % m.stride.tolist())
+        # ---------sly
+        # if isinstance(m, (DetectX, DetectYoloX)):
+        #     m.inplace = self.inplace
+        #     self.stride = torch.tensor(m.stride)
+        #     m.initialize_biases()  # only run once
+        #     self.model_type = 'yolox'
+        #     self.loss_category = ComputeXLoss  # use ComputeXLoss
+        if isinstance(m, Decoupled_Detect) or isinstance(m, ASFF_Detect):
+            s = 256  # 2x min stride
+            m.inplace = self.inplace
+            m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward
+            m.anchors /= m.stride.view(-1, 1, 1)
+            check_anchor_order(m)
+            self.stride = m.stride
+            try:
+                self._initialize_biases()  # only run once
+                LOGGER.info('initialize_biases done')
+            except:
+                LOGGER.info('decoupled no biase ')
+        if isinstance(m, IDetect):
+            s = 256  # 2x min stride
+            m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward
+            m.anchors /= m.stride.view(-1, 1, 1)
+            check_anchor_order(m)
+            self.stride = m.stride
+            self._initialize_biases()  # only run once
+        if isinstance(m, IAuxDetect):
+            s = 256  # 2x min stride
+            m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))[:4]])  # forward
+            # print(m.stride)
+            m.anchors /= m.stride.view(-1, 1, 1)
+            check_anchor_order(m)
+            self.stride = m.stride
+            self._initialize_aux_biases()  # only run once
 
         # Init weights, biases
         initialize_weights(self)
         self.info()
         logger.info('')
 
-    def forward(self, x, augment=False, profile=False):
+    def forward(self, x, augment=False, profile=False, visualize=False):
         if augment:
             img_size = x.shape[-2:]  # height, width
             s = [1, 0.83, 0.67]  # scales
@@ -187,9 +228,9 @@ class Model(nn.Module):
                 y.append(yi)
             return torch.cat(y, 1), None  # augmented inference, train
         else:
-            return self.forward_once(x, profile)  # single-scale inference, train
+            return self.forward_once(x, profile, visualize)  # single-scale inference, train
 
-    def forward_once(self, x, profile=False):
+    def forward_once(self, x, profile=False, visualize=False):
         y, dt = [], []  # outputs
         for m in self.model:
             if m.f != -1:  # if not from previous layer
@@ -205,6 +246,21 @@ class Model(nn.Module):
 
             x = m(x)  # run
             y.append(x if m.i in self.save else None)  # save output
+
+# -----sly 特征图可视化 注意路径和层数的修改 该函数在plots.py中
+#             无论是在detect.py还是在train.py中都会进行可视化特征图。
+#             然而训练的过程中并不一定需要一直可视化特征图
+# feature_vis参数是用来控制是否保存可视化特征图的，保存的特征图会存在features文件夹中。
+# 如果想看其它层的特征只需要修改m.type或是用m.i来进行判断是否可视化特征图。
+# m.type对应的是yaml文件中的module，即yolov5的基础模块，例如c3，conv，spp等等，而m.i则更好理解，即是模块的id，通常就是顺序
+#             visualize = Path('runs/detect/exp/featurevisualization')
+            if m.type == 'models.common.C3' and visualize:
+                feature_visualization(x, m.type, m.i, save_dir=visualize)
+            return x
+            # feature_vis = True
+            # if m.type == 'models.common.C3' and feature_vis:
+            #     print(m.type, m.i)
+            #     feature_visualization(x, m.type, m.i)
 
         if profile:
             print('%.1fms total' % sum(dt))
@@ -266,6 +322,32 @@ class Model(nn.Module):
     def info(self, verbose=False, img_size=640):  # print model information
         model_info(self, verbose, img_size)
 
+# -----sly
+    def _profile_one_layer(self, m, x, dt):
+        # c = isinstance(m, Detect)  # update is final layer, copy input as inplace fix
+        c = isinstance(m, Detect) or isinstance(m, ASFF_Detect) or isinstance(m,Decoupled_Detect)  # copy input as inplace fix
+        o = thop.profile(m, inputs=(x.copy() if c else x,), verbose=False)[0] / 1E9 * 2 if thop else 0  # FLOPs
+        t = time_sync()
+        for _ in range(10):
+            m(x.copy() if c else x)
+        dt.append((time_sync() - t) * 100)
+        if m == self.model[0]:
+            LOGGER.info(f"{'time (ms)':>10s} {'GFLOPs':>10s} {'params':>10s}  {'module'}")
+        LOGGER.info(f'{dt[-1]:10.2f} {o:10.2f} {m.np:10.0f}  {m.type}')
+        if c:
+            LOGGER.info(f"{sum(dt):10.2f} {'-':>10s} {'-':>10s}  Total")
+
+    def _apply(self, fn):
+        # Apply to(), cpu(), cuda(), half() to model tensors that are not parameters or registered buffers
+        self = super()._apply(fn)
+        m = self.model[-1]  # Detect()
+        if isinstance(m, Detect) or isinstance(m, ASFF_Detect) or isinstance(m, Decoupled_Detect):
+            m.stride = fn(m.stride)
+            m.grid = list(map(fn, m.grid))
+            if isinstance(m.anchor_grid, list):
+                m.anchor_grid = list(map(fn, m.anchor_grid))
+        return self
+
 
 def parse_model(d, ch):  # model_dict, input_channels(3)
     logger.info('\n%3s%18s%3s%10s  %-40s%-30s' % ('', 'from', 'n', 'params', 'module', 'arguments'))
@@ -286,7 +368,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
         if m in [Conv, GhostConv, Bottleneck, GhostBottleneck, SPP, SPPF, DWConv, MixConv2d, Focus, CrossConv,
                  BottleneckCSP, C3, C3TR, C3SPP, C3Ghost, nn.ConvTranspose2d, DWConvTranspose2d, C3x,
                  C3HB, CBH, ES_Bottleneck, CoT3, BoT3, SEAM, RFEM, C3RFEM, ConvMixer, MultiSEAM, C3STR, MobileOneBlock,
-                 StemBlock]:
+                 StemBlock, CoordAtt]:
             c1, c2 = ch[f], args[0]
 
             # Normal

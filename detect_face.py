@@ -152,6 +152,7 @@ if __name__ == '__main__':
     parser.add_argument('--weights', nargs='+', type=str, default='weights/s_Cotnet.pt', help='model.pt path(s)')
     parser.add_argument('--image', type=str, default='data/images/', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
+    parser.add_argument('--visualize', action='store_true', help='visualize features')
     opt = parser.parse_args()
     print(opt)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

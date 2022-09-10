@@ -136,6 +136,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_folder', default='./tea_evaluate/tea_txt/', type=str, help='Dir to save txt results')
     parser.add_argument('--dataset_folder', default=r'D:\Cp\pycharm\tea\tea_data\val', type=str, help='dataset path')
     parser.add_argument('--folder_pict', default='/yolov5-face/data/widerface/val/wider_val.txt', type=str, help='folder_pict')
+    parser.add_argument('--visualize', action='store_true', help='visualize features')
     opt = parser.parse_args()
     print(opt)
 
