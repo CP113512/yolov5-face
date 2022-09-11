@@ -43,6 +43,7 @@
 # python train.py --cfg models/hub_sly/yolov5s-SOCA.yaml --name s_SOCA --device 0;
 # python train.py --cfg models/hub_sly/yolov5s-ACmix.yaml --name s_ACmix --device 0;#########################
 
+# -----------------------------------跑！
 # 注意力
 # python train.py --cfg models/hub_sly2/yolov5s-4-CBAM.yaml --name s-4-CBAM;
 # python train.py --cfg models/hub_sly2/yolov5s-gam.yaml --name s-gam;
@@ -50,8 +51,10 @@
 # python train.py --cfg models/hub_sly2/yolov5s-c3tr.yaml --name s-c3tr;
 # python train.py --cfg models/hub_sly2/yolov5s-c3str.yaml --name s-c3str;
 
-# 卷积
-# python train.py --cfg models/hub_sly2/yolov5s-involution.yaml --name s-involution;
+
+# python train.py --cfg models/hub_sly2/yolov5s-4.yaml --name s-4
+# python train.py --cfg models/hub_sly2/yolov5s-4-c3tr.yaml --name s-4-c3tr
+# python train.py --cfg models/hub_sly2/yolov5s-4-c3tr-carafe.yaml --name s-4-c3tr-carafe
 
 # 结构
 # python train.py --cfg models/hub_sly2/yolov5s-4-CBAM-Swin-BiFPN.yaml --name s-4-CBAM-Swin-BiFPN;
@@ -59,11 +62,13 @@
 # python train.py --cfg models/hub_sly2/yolov5s-bifpn.yaml --name s-bifpn;
 # python train.py --cfg models/hub_sly2/yolov5s-bot.yaml --name s-bot;
 
+# ----------------------------------------------下面的等明天，还在改
+
 # 解耦头
-# python train.py --cfg models/hub_sly2/yolov5s-decoupled.yaml --name s-decoupled;
-# python train.py --cfg models/hub_sly2/yolov5s-asff.yaml --name s-asff;
-# python train.py --cfg models/hub_sly2/yolov5s-asff-cbam.yaml --name s-asff-cbam;
+# python train.py --cfg models/hub_sly2/yolov5s-decoupled.yaml --name s-decoupled;##############
+# python train.py --cfg models/hub_sly2/yolov5s-asff.yaml --name s-asff;##############
+# python train.py --cfg models/hub_sly2/yolov5s-asff-cbam.yaml --name s-asff-cbam;##############
+# python train.py --cfg models/hub_sly2/yolov5s-4-asff.yaml --name s-4-asff;##############
 
-
-# python train.py --cfg
-
+# 卷积
+# python train.py --cfg models/hub_sly2/yolov5s-involution.yaml --name s-involution;###########

@@ -10,7 +10,7 @@ import torch.nn as nn
 
 sys.path.append('./')  # to run '$ python *.py' files in subdirectories
 logger = logging.getLogger(__name__)
-
+from models.Detect.MuitlHead3 import *
 from models.common import *
 from models.experimental import *
 from utils.autoanchor import check_anchor_order
@@ -18,6 +18,7 @@ from utils.general import make_divisible, check_file, set_logging
 from utils.torch_utils import time_synchronized, fuse_conv_and_bn, model_info, scale_img, initialize_weights, \
     select_device, copy_attr
 from utils.plots import *
+
 try:
     import thop  # for FLOPS computation
 except ImportError:
@@ -31,7 +32,7 @@ class Detect(nn.Module):
     def __init__(self, nc=80, anchors=(), ch=()):  # detection layer
         super(Detect, self).__init__()
         self.nc = nc  # number of classes
-        #self.no = nc + 5  # number of outputs per anchor
+        # self.no = nc + 5  # number of outputs per anchor
         # --------------------------------------
         self.no = nc + 5 + 12  # number of outputs per anchor
 
@@ -56,28 +57,36 @@ class Detect(nn.Module):
 
                 if self.grid[i].shape[2:4] != x[i].shape[2:4]:
                     # self.grid[i] = self._make_grid(nx, ny).to(x[i].device)
-                    self.grid[i], self.anchor_grid[i] = self._make_grid_new(nx, ny,i)
+                    self.grid[i], self.anchor_grid[i] = self._make_grid_new(nx, ny, i)
 
                 y = torch.full_like(x[i], 0)
                 # ---------------------------------------------------------
-                y = y + torch.cat((x[i][:, :, :, :, 0:5].sigmoid(), torch.cat((x[i][:, :, :, :, 5:17], x[i][:, :, :, :, 17:17+self.nc].sigmoid()), 4)), 4)
+                y = y + torch.cat((x[i][:, :, :, :, 0:5].sigmoid(),
+                                   torch.cat((x[i][:, :, :, :, 5:17], x[i][:, :, :, :, 17:17 + self.nc].sigmoid()), 4)),
+                                  4)
 
-                box_xy = (y[:, :, :, :, 0:2] * 2. - 0.5 + self.grid[i].to(x[i].device)) * self.stride[i] # xy
-                box_wh = (y[:, :, :, :, 2:4] * 2) ** 2 * self.anchor_grid[i] # wh
+                box_xy = (y[:, :, :, :, 0:2] * 2. - 0.5 + self.grid[i].to(x[i].device)) * self.stride[i]  # xy
+                box_wh = (y[:, :, :, :, 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
                 # box_conf = torch.cat((box_xy, torch.cat((box_wh, y[:, :, :, :, 4:5]), 4)), 4)
 
-                landm1 = y[:, :, :, :, 5:7] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[i]  # landmark x1 y1
-                landm2 = y[:, :, :, :, 7:9] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[i]  # landmark x2 y2
-                landm3 = y[:, :, :, :, 9:11] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[i]  # landmark x3 y3
-                landm4 = y[:, :, :, :, 11:13] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[i]  # landmark x4 y4
-                landm5 = y[:, :, :, :, 13:15] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[i]  # landmark x5 y5
+                landm1 = y[:, :, :, :, 5:7] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x1 y1
+                landm2 = y[:, :, :, :, 7:9] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x2 y2
+                landm3 = y[:, :, :, :, 9:11] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x3 y3
+                landm4 = y[:, :, :, :, 11:13] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x4 y4
+                landm5 = y[:, :, :, :, 13:15] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x5 y5
                 # ---------------------------------------------------------
                 landm6 = y[:, :, :, :, 15:17] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
                     i]  # landmark x5 y5
                 # landm = torch.cat((landm1, torch.cat((landm2, torch.cat((landm3, torch.cat((landm4, landm5), 4)), 4)), 4)), 4)
                 # y = torch.cat((box_conf, torch.cat((landm, y[:, :, :, :, 15:15+self.nc]), 4)), 4)
                 # ---------------------------------------------------------
-                y = torch.cat([box_xy, box_wh, y[:, :, :, :, 4:5], landm1, landm2, landm3, landm4, landm5, landm6,y[:, :, :, :, 17:17+self.nc]], -1)
+                y = torch.cat([box_xy, box_wh, y[:, :, :, :, 4:5], landm1, landm2, landm3, landm4, landm5, landm6,
+                               y[:, :, :, :, 17:17 + self.nc]], -1)
 
                 z.append(y.view(bs, -1, self.no))
             return torch.cat(z, 1)
@@ -96,50 +105,58 @@ class Detect(nn.Module):
 
                 y = torch.full_like(x[i], 0)
                 # --------------------------------------
-                class_range = list(range(5)) + list(range(17,17+self.nc))
+                class_range = list(range(5)) + list(range(17, 17 + self.nc))
                 y[..., class_range] = x[i][..., class_range].sigmoid()
-                #--------------------------------------
+                # --------------------------------------
                 y[..., 5:17] = x[i][..., 5:17]
-                #y = x[i].sigmoid()
+                # y = x[i].sigmoid()
 
                 y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i].to(x[i].device)) * self.stride[i]  # xy
                 y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
 
-                #y[..., 5:15] = y[..., 5:15] * 8 - 4
-                y[..., 5:7]   = y[..., 5:7] *   self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[i] # landmark x1 y1
-                y[..., 7:9]   = y[..., 7:9] *   self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[i]# landmark x2 y2
-                y[..., 9:11]  = y[..., 9:11] *  self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[i]# landmark x3 y3
-                y[..., 11:13] = y[..., 11:13] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[i]# landmark x4 y4
-                y[..., 13:15] = y[..., 13:15] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[i]# landmark x5 y5
+                # y[..., 5:15] = y[..., 5:15] * 8 - 4
+                y[..., 5:7] = y[..., 5:7] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x1 y1
+                y[..., 7:9] = y[..., 7:9] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x2 y2
+                y[..., 9:11] = y[..., 9:11] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x3 y3
+                y[..., 11:13] = y[..., 11:13] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x4 y4
+                y[..., 13:15] = y[..., 13:15] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x5 y5
                 # --------------------------------------
                 y[..., 15:17] = y[..., 15:17] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
                     i]  # landmark x6 y6
-                #y[..., 5:7] = (y[..., 5:7] * 2 -1) * self.anchor_grid[i]  # landmark x1 y1
-                #y[..., 7:9] = (y[..., 7:9] * 2 -1) * self.anchor_grid[i]  # landmark x2 y2
-                #y[..., 9:11] = (y[..., 9:11] * 2 -1) * self.anchor_grid[i]  # landmark x3 y3
-                #y[..., 11:13] = (y[..., 11:13] * 2 -1) * self.anchor_grid[i]  # landmark x4 y4
-                #y[..., 13:15] = (y[..., 13:15] * 2 -1) * self.anchor_grid[i]  # landmark x5 y5
+                # y[..., 5:7] = (y[..., 5:7] * 2 -1) * self.anchor_grid[i]  # landmark x1 y1
+                # y[..., 7:9] = (y[..., 7:9] * 2 -1) * self.anchor_grid[i]  # landmark x2 y2
+                # y[..., 9:11] = (y[..., 9:11] * 2 -1) * self.anchor_grid[i]  # landmark x3 y3
+                # y[..., 11:13] = (y[..., 11:13] * 2 -1) * self.anchor_grid[i]  # landmark x4 y4
+                # y[..., 13:15] = (y[..., 13:15] * 2 -1) * self.anchor_grid[i]  # landmark x5 y5
 
                 z.append(y.view(bs, -1, self.no))
                 # ---sly热力图可视化
-                logits_.append(logits.view(bs, -1, self.no-5))
-
-        return x if self.training else (torch.cat(z, 1), torch.cat(logits_, 1), x)
+                logits_.append(logits.view(bs, -1, self.no - 5))
+        return x if self.training else (torch.cat(z, 1), x)
+        # return x if self.training else (torch.cat(z, 1), torch.cat(logits_, 1), x)
 
     @staticmethod
     def _make_grid(nx=20, ny=20):
         yv, xv = torch.meshgrid([torch.arange(ny), torch.arange(nx)])
         return torch.stack((xv, yv), 2).view((1, 1, ny, nx, 2)).float()
 
-    def _make_grid_new(self,nx=20, ny=20,i=0):
+    def _make_grid_new(self, nx=20, ny=20, i=0):
         d = self.anchors[i].device
-        if '1.10.0' in torch.__version__: # torch>=1.10.0 meshgrid workaround for torch>=0.7 compatibility
+        if '1.10.0' in torch.__version__:  # torch>=1.10.0 meshgrid workaround for torch>=0.7 compatibility
             yv, xv = torch.meshgrid([torch.arange(ny).to(d), torch.arange(nx).to(d)], indexing='ij')
         else:
             yv, xv = torch.meshgrid([torch.arange(ny).to(d), torch.arange(nx).to(d)])
         grid = torch.stack((xv, yv), 2).expand((1, self.na, ny, nx, 2)).float()
-        anchor_grid = (self.anchors[i].clone() * self.stride[i]).view((1, self.na, 1, 1, 2)).expand((1, self.na, ny, nx, 2)).float()
+        anchor_grid = (self.anchors[i].clone() * self.stride[i]).view((1, self.na, 1, 1, 2)).expand(
+            (1, self.na, ny, nx, 2)).float()
         return grid, anchor_grid
+
+
 class Model(nn.Module):
     def __init__(self, cfg='yolov5s.yaml', ch=3, nc=None):  # model, input channels, number of classes
         super(Model, self).__init__()
@@ -177,9 +194,9 @@ class Model(nn.Module):
         #     m.initialize_biases()  # only run once
         #     self.model_type = 'yolox'
         #     self.loss_category = ComputeXLoss  # use ComputeXLoss
-        if isinstance(m, Decoupled_Detect) or isinstance(m, ASFF_Detect):
-            s = 256  # 2x min stride
-            m.inplace = self.inplace
+        elif isinstance(m, Decoupled_Detect) or isinstance(m, ASFF_Detect) or isinstance(m, ASFF_Detect4):
+            s = 256 # 2x min stride
+            # m.inplace = self.inplace
             m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward
             m.anchors /= m.stride.view(-1, 1, 1)
             check_anchor_order(m)
@@ -211,6 +228,7 @@ class Model(nn.Module):
         logger.info('')
 
     def forward(self, x, augment=False, profile=False, visualize=False):
+    # def forward(self, x, augment=False, profile=False):
         if augment:
             img_size = x.shape[-2:]  # height, width
             s = [1, 0.83, 0.67]  # scales
@@ -228,9 +246,11 @@ class Model(nn.Module):
                 y.append(yi)
             return torch.cat(y, 1), None  # augmented inference, train
         else:
-            return self.forward_once(x, profile, visualize)  # single-scale inference, train
+            # return self.forward_once(x, profile)  # single-scale inference, train
+            return self.forward_once(x, profile, visualize)
 
     def forward_once(self, x, profile=False, visualize=False):
+    # def forward_once(self, x, profile=False):
         y, dt = [], []  # outputs
         for m in self.model:
             if m.f != -1:  # if not from previous layer
@@ -247,16 +267,16 @@ class Model(nn.Module):
             x = m(x)  # run
             y.append(x if m.i in self.save else None)  # save output
 
-# -----sly 特征图可视化 注意路径和层数的修改 该函数在plots.py中
-#             无论是在detect.py还是在train.py中都会进行可视化特征图。
-#             然而训练的过程中并不一定需要一直可视化特征图
-# feature_vis参数是用来控制是否保存可视化特征图的，保存的特征图会存在features文件夹中。
-# 如果想看其它层的特征只需要修改m.type或是用m.i来进行判断是否可视化特征图。
-# m.type对应的是yaml文件中的module，即yolov5的基础模块，例如c3，conv，spp等等，而m.i则更好理解，即是模块的id，通常就是顺序
-#             visualize = Path('runs/detect/exp/featurevisualization')
+            # -----sly 特征图可视化 注意路径和层数的修改 该函数在plots.py中
+            #             无论是在detect.py还是在train.py中都会进行可视化特征图。
+            #             然而训练的过程中并不一定需要一直可视化特征图
+            # feature_vis参数是用来控制是否保存可视化特征图的，保存的特征图会存在features文件夹中。
+            # 如果想看其它层的特征只需要修改m.type或是用m.i来进行判断是否可视化特征图。
+            # m.type对应的是yaml文件中的module，即yolov5的基础模块，例如c3，conv，spp等等，而m.i则更好理解，即是模块的id，通常就是顺序
+            #             visualize = Path('runs/detect/exp/featurevisualization')
             if m.type == 'models.common.C3' and visualize:
                 feature_visualization(x, m.type, m.i, save_dir=visualize)
-            return x
+            # return x 害死我了 不过还好逮到你
             # feature_vis = True
             # if m.type == 'models.common.C3' and feature_vis:
             #     print(m.type, m.i)
@@ -322,10 +342,25 @@ class Model(nn.Module):
     def info(self, verbose=False, img_size=640):  # print model information
         model_info(self, verbose, img_size)
 
-# -----sly
+    # -----sly
+    # def _profile_one_layer(self, m, x, dt):
+    #     # c = isinstance(m, Detect)  # update is final layer, copy input as inplace fix
+    #     # c = isinstance(m, Detect) or isinstance(m, ASFF_Detect) or isinstance(m,
+    #     #                                                                       Decoupled_Detect)
+    #     c = isinstance(m, ASFF_Detect) or isinstance(m, Decoupled_Detect)  # copy input as inplace fix
+    #     o = thop.profile(m, inputs=(x.copy() if c else x,), verbose=False)[0] / 1E9 * 2 if thop else 0  # FLOPs
+    #     t = time_sync()
+    #     for _ in range(10):
+    #         m(x.copy() if c else x)
+    #     dt.append((time_sync() - t) * 100)
+    #     if m == self.model[0]:
+    #         LOGGER.info(f"{'time (ms)':>10s} {'GFLOPs':>10s} {'params':>10s}  {'module'}")
+    #     LOGGER.info(f'{dt[-1]:10.2f} {o:10.2f} {m.np:10.0f}  {m.type}')
+    #     if c:
+    #         LOGGER.info(f"{sum(dt):10.2f} {'-':>10s} {'-':>10s}  Total")
+
     def _profile_one_layer(self, m, x, dt):
-        # c = isinstance(m, Detect)  # update is final layer, copy input as inplace fix
-        c = isinstance(m, Detect) or isinstance(m, ASFF_Detect) or isinstance(m,Decoupled_Detect)  # copy input as inplace fix
+        c = m == self.model[-1]  # is final layer, copy input as inplace fix
         o = thop.profile(m, inputs=(x.copy() if c else x,), verbose=False)[0] / 1E9 * 2 if thop else 0  # FLOPs
         t = time_sync()
         for _ in range(10):
@@ -341,7 +376,8 @@ class Model(nn.Module):
         # Apply to(), cpu(), cuda(), half() to model tensors that are not parameters or registered buffers
         self = super()._apply(fn)
         m = self.model[-1]  # Detect()
-        if isinstance(m, Detect) or isinstance(m, ASFF_Detect) or isinstance(m, Decoupled_Detect):
+        # if isinstance(m, Detect) or isinstance(m, ASFF_Detect) or isinstance(m, Decoupled_Detect):
+        if isinstance(m, ASFF_Detect) or isinstance(m, Decoupled_Detect) or isinstance(m, ASFF_Detect4):
             m.stride = fn(m.stride)
             m.grid = list(map(fn, m.grid))
             if isinstance(m.anchor_grid, list):
@@ -368,7 +404,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
         if m in [Conv, GhostConv, Bottleneck, GhostBottleneck, SPP, SPPF, DWConv, MixConv2d, Focus, CrossConv,
                  BottleneckCSP, C3, C3TR, C3SPP, C3Ghost, nn.ConvTranspose2d, DWConvTranspose2d, C3x,
                  C3HB, CBH, ES_Bottleneck, CoT3, BoT3, SEAM, RFEM, C3RFEM, ConvMixer, MultiSEAM, C3STR, MobileOneBlock,
-                 StemBlock, CoordAtt]:
+                 StemBlock, CoordAtt, CTR3]:
             c1, c2 = ch[f], args[0]
 
             # Normal
@@ -390,17 +426,18 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
             #     c2 = make_divisible(c2, 8) if c2 != no else c2
 
             args = [c1, c2, *args[1:]]
-            if m in [BottleneckCSP, C3, C3TR, C3Ghost, C3x, CoT3, BoT3, C3HB, C3RFEM, C3STR]:
+            if m in [BottleneckCSP, C3, C3TR, CTR3, C3Ghost, C3x, CoT3, BoT3, C3HB, C3RFEM, C3STR]:
                 args.insert(2, n)
                 n = 1
 
         elif m is nn.BatchNorm2d:
             args = [ch[f]]
             # add module research
+        # GAMAttention,
         elif m in [CARAFE, SPPCSPC, RepConv, BoT3, CA, CBAM, NAMAttention, GAMAttention, Involution, Stem,
-                       ResCSPC, ResCSPB, \
-                       ResXCSPB, ResXCSPC, BottleneckCSPB, BottleneckCSPC,
-                       ASPP, BasicRFB, SPPCSPC_group, HorBlock, CNeB, nn.ConvTranspose2d]:
+                   ResCSPC, ResCSPB, \
+                   ResXCSPB, ResXCSPC, BottleneckCSPB, BottleneckCSPC,
+                   ASPP, BasicRFB, SPPCSPC_group, HorBlock, CNeB, nn.ConvTranspose2d]:
             c1, c2 = ch[f], args[0]
             if c2 != no:  # if not output
                 c2 = make_divisible(c2 * gw, 8)
@@ -438,7 +475,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
         elif m in [ReOrg, DWT]:
             c2 = ch[f] * 4
         # ACmix,
-        elif m in [S2Attention, SimSPPF,  CrissCrossAttention, SOCA, ShuffleAttention, SEAttention, SimAM,
+        elif m in [S2Attention, SimSPPF, CrissCrossAttention, SOCA, ShuffleAttention, SEAttention, SimAM,
                    SKAttention]:
             c1, c2 = ch[f], args[0]
             if c2 != no:  # if not output
@@ -523,6 +560,10 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
             args.append([ch[x] for x in f])
             if isinstance(args[1], int):  # number of anchors
                 args[1] = [list(range(args[1] * 2))] * len(f)
+        elif m is ASFF_Detect4:
+            args.append([ch[x] for x in f])
+            if isinstance(args[1], int):  # number of anchors
+                args[1] = [list(range(args[1] * 2))] * len(f)
         elif m is Decoupled_Detect:
             args.append([ch[x] for x in f])
             if isinstance(args[1], int):  # number of anchors
@@ -559,6 +600,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
 
 from thop import profile
 from thop import clever_format
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--cfg', type=str, default='yolov5s.yaml', help='model.yaml')
@@ -577,6 +619,6 @@ if __name__ == '__main__':
         input = torch.Tensor(1, 3, 512, 640).to(device)
     model.train()
     print(model)
-    flops, params = profile(model, inputs=(input, ))
+    flops, params = profile(model, inputs=(input,))
     flops, params = clever_format([flops, params], "%.3f")
-    print('Flops:', flops, ',Params:' ,params)
+    print('Flops:', flops, ',Params:', params)

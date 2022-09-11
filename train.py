@@ -138,8 +138,8 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     if wandb and wandb.run is None:
         opt.hyp = hyp  # add hyperparameters
         wandb_run = wandb.init(config=opt, resume="allow",
-                               project='yolo-cpslytest',
-                               entity= 'cp-sly',
+                               project='yolo-cpslyfinal3',
+                               entity='cp-sly',
                                name=save_dir.stem,
                                id=ckpt.get('wandb_id') if 'ckpt' in locals() else None)
     loggers = {'wandb': wandb}  # loggers dict
@@ -464,7 +464,7 @@ if __name__ == '__main__':
     parser.add_argument('--bucket', type=str, default='', help='gsutil bucket')
     parser.add_argument('--cache-images', action='store_true', help='cache images for faster training')
     parser.add_argument('--image-weights', action='store_true', help='use weighted image selection for training')
-    parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--device', default='1', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--multi-scale', action='store_true', default=False, help='vary img-size +/- 50%%')
     parser.add_argument('--single-cls', action='store_true', help='train multi-class data as single-class')
     parser.add_argument('--adam', action='store_true', help='use torch.optim.Adam() optimizer')
@@ -473,7 +473,7 @@ if __name__ == '__main__':
     parser.add_argument('--log-imgs', type=int, default=16, help='number of images for W&B logging, max 100')
     parser.add_argument('--log-artifacts', action='store_true', help='log artifacts, i.e. final trained model')
     parser.add_argument('--workers', type=int, default=8, help='maximum number of dataloader workers')
-    parser.add_argument('--project', default=r"runs\train", help='save to project/name') #'runs/train' D:\帅璐宇\Tea\result\runs\train
+    parser.add_argument('--project', default=r"runs/train", help='save to project/name') #'runs/train' D:\帅璐宇\Tea\result\runs\train
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     # -----------------------sly

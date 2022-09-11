@@ -26,7 +26,9 @@ class Decouple(nn.Module):
     # Decoupled convolution
     def __init__(self, c1, nc=80, na=3):  # ch_in, num_classes, num_anchors
         super().__init__()
+        # c_=c1
         c_ = min(c1, 256)  # min(c1, nc * na)
+        # c_ = min(c1, 128)  # min(c1, nc * na)
         self.na = na  # number of anchors
         self.nc = nc  # number of classes
         self.a = Conv(c1, c_, 1)
@@ -183,7 +185,7 @@ class ASFFV5(nn.Module):
             return out
 
 
-class Decoupled_Detect1(nn.Module):
+class Decoupled_Detect(nn.Module):
     stride = None  # strides computed during build
     # onnx_dynamic = False  # ONNX export parameter
     # export = False  # export mode
@@ -204,7 +206,7 @@ class Decoupled_Detect1(nn.Module):
         self.register_buffer('anchors', torch.tensor(anchors).float().view(self.nl, -1, 2))  # shape(nl,na,2)
         self.m = nn.ModuleList(Decouple(x, self.nc, self.na) for x in ch)
         self.inplace = inplace  # use in-place ops (e.g. slice assignment)
-
+    # def __init__(self, c1, nc=80, na=3):  # ch_in, num_classes, num_anchors
     # ------------sly
     def forward(self, x):
         z = []  # inference output
@@ -288,7 +290,7 @@ class Decoupled_Detect1(nn.Module):
         return grid, anchor_grid
 
 
-class Decoupled_Detect(nn.Module):
+class Decoupled_Detect1(nn.Module):
     stride = None  # strides computed during build
     # onnx_dynamic = False  # ONNX export parameter
     # export = False  # export mode
@@ -406,13 +408,20 @@ class ASFF_Detect(nn.Module):  # add ASFFV5 layer and Rfb
         self.nl = len(anchors)  # number of detection layers
         self.na = len(anchors[0]) // 2  # number of anchors
         self.grid = [torch.zeros(1)] * self.nl  # init grid
+
+        # def __init__(self, level, multiplier=1, rfb=False, vis=False, act_cfg=True):
         self.l0_fusion = ASFFV5(level=0, multiplier=multiplier, rfb=rfb)
         self.l1_fusion = ASFFV5(level=1, multiplier=multiplier, rfb=rfb)
         self.l2_fusion = ASFFV5(level=2, multiplier=multiplier, rfb=rfb)
-        self.anchor_grid = [torch.zeros(1)] * self.nl  # init anchor grid
+        # self.anchor_grid = [torch.zeros(1)] * self.nl  # init anchor grid
+        a = torch.tensor(anchors).float().view(self.nl, -1, 2)
         self.register_buffer('anchors', torch.tensor(anchors).float().view(self.nl, -1, 2))  # shape(nl,na,2)
+        self.register_buffer('anchor_grid', a.clone().view(self.nl, 1, -1, 1, 1, 2))  # shape(nl,1,na,1,1,2)
         self.m = nn.ModuleList(nn.Conv2d(x, self.no * self.na, 1) for x in ch)  # output conv
-        self.inplace = inplace  # use in-place ops (e.g. slice assignment)
+        # self.inplace = inplace  # use in-place ops (e.g. slice assignment)
+
+    # 512, 256, 128 -> multiplier = 1
+    # 256, 128, 64 -> multiplier = 0.5
 
     def forward(self, x):
         z = []  # inference output

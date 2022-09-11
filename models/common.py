@@ -36,6 +36,7 @@ from utils.general import (LOGGER, ROOT, Profile, check_requirements, check_suff
 # from utils.torch_utils import copy_attr, smart_inference_mode, time_sync
 from models.Detect.MuitlHead import *
 from models.Detect.MuitlHead2 import *
+from models.Detect.MuitlHead3 import *
 from models.Models.FaceV2 import SEAM, RFEM, C3RFEM, ConvMixer, MultiSEAM
 from models.Models.research import CARAFE, MP, SPPCSPC, RepConv, BoT3,\
     PatchEmbed, SwinTransformer_Layer, LayerNorm, CA, CBAM, Concat_bifpn, Involution, \
@@ -1745,3 +1746,21 @@ class CoordAtt(nn.Module):
         out = identity * a_w * a_h
 
         return out
+
+
+
+class CTR3(nn.Module):
+    # CSP Bottleneck with 3 convolutions
+    def __init__(self, c1, c2, n=1,e=0.5,e2=1,w=20,h=20):  # ch_in, ch_out, number, , expansion,w,h
+        super(CTR3, self).__init__()
+        c_ = int(c2*e)  # hidden channels
+        self.cv1 = Conv(c1, c_, 1, 1)
+        self.cv2 = Conv(c1, c_, 1, 1)
+        self.cv3 = Conv(2 * c_, c2, 1)  # act=FReLU(c2)
+        self.m = nn.Sequential(*[BottleneckTransformer(c_ ,c_, stride=1, heads=4,mhsa=True,resolution=(w,h),expansion=e2) for _ in range(n)])
+        # self.m = nn.Sequential(*[CrossConv(c_, c_, 3, 1, g, 1.0, shortcut) for _ in range(n)])
+
+    def forward(self, x):
+        #print("CTR3-INPUT:",x.shape)
+       # return self.cv3
+        return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), dim=1))
