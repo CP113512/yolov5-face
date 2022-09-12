@@ -65,10 +65,11 @@
 # ----------------------------------------------下面的等明天，还在改
 
 # 解耦头
-# python train.py --cfg models/hub_sly2/yolov5s-decoupled.yaml --name s-decoupled;##############
-# python train.py --cfg models/hub_sly2/yolov5s-asff.yaml --name s-asff;##############
-# python train.py --cfg models/hub_sly2/yolov5s-asff-cbam.yaml --name s-asff-cbam;##############
+# python train.py --cfg models/hub_sly2/yolov5s-asff.yaml --name s-asff;
+# python train.py --cfg models/hub_sly2/yolov5s-asff-cbam.yaml --name s-asff-cbam;
 # python train.py --cfg models/hub_sly2/yolov5s-4-asff.yaml --name s-4-asff;##############
+# python train.py --cfg models/hub_sly2/yolov5s-decoupled.yaml --name s-decoupled;##############
+# python train.py --cfg models/hub_sly2/yolov5s-4-decoupled.yaml --name s-4-decoupled;##############
 
 # 卷积
 # python train.py --cfg models/hub_sly2/yolov5s-involution.yaml --name s-involution;###########

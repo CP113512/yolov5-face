@@ -26,11 +26,12 @@ from utils.torch_utils import (fuse_conv_and_bn, initialize_weights, model_info,
 class ASFF_Detect4(nn.Module):  # add ASFFV5 layer and Rfb
     stride = None  # strides computed during build
     onnx_dynamic = False  # ONNX export parameter
+    export_cat = False  # onnx export cat output
 
     def __init__(self, nc=1, anchors=(), ch=(), multiplier=0.5, rfb=False, inplace=True):  # detection layer
         super().__init__()
         self.nc = nc  # number of classes
-        self.no = nc + 5  # number of outputs per anchor
+        self.no = nc + 5 + 12 # number of outputs per anchor
         self.nl = len(anchors)  # number of detection layers
         self.na = len(anchors[0]) // 2  # number of anchors
         self.grid = [torch.zeros(1)] * self.nl  # init grid
@@ -52,37 +53,83 @@ class ASFF_Detect4(nn.Module):  # add ASFFV5 layer and Rfb
         result.append(self.l1_fusion(x))
         result.append(self.l0_fusion(x))
         x = result
+        if self.export_cat:
+            for i in range(self.nl):
+                x[i] = self.m[i](x[i])  # conv
+                bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
+                x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
+
+                if self.grid[i].shape[2:4] != x[i].shape[2:4]:
+                    self.grid[i], self.anchor_grid[i] = self._make_grid_new(nx, ny, i)
+
+                y = torch.full_like(x[i], 0)
+                y = y + torch.cat((x[i][:, :, :, :, 0:5].sigmoid(),
+                                   torch.cat((x[i][:, :, :, :, 5:17], x[i][:, :, :, :, 17:17 + self.nc].sigmoid()), 4)),
+                                  4)
+                box_xy = (y[:, :, :, :, 0:2] * 2. - 0.5 + self.grid[i].to(x[i].device)) * self.stride[i]  # xy
+                box_wh = (y[:, :, :, :, 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
+                landm1 = y[:, :, :, :, 5:7] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x1 y1
+                landm2 = y[:, :, :, :, 7:9] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x2 y2
+                landm3 = y[:, :, :, :, 9:11] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x3 y3
+                landm4 = y[:, :, :, :, 11:13] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x4 y4
+                landm5 = y[:, :, :, :, 13:15] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x5 y5
+                landm6 = y[:, :, :, :, 15:17] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x5 y5
+                y = torch.cat([box_xy, box_wh, y[:, :, :, :, 4:5], landm1, landm2, landm3, landm4, landm5, landm6,
+                               y[:, :, :, :, 17:17 + self.nc]], -1)
+                z.append(y.view(bs, -1, self.no))
+            return torch.cat(z, 1)
+
         for i in range(self.nl):
             x[i] = self.m[i](x[i])  # conv
             bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
             x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
 
             if not self.training:  # inference
-                if self.grid[i].shape[2:4] != x[i].shape[2:4] or self.onnx_dynamic:
-                    self.grid[i], self.anchor_grid[i] = self._make_grid(nx, ny, i)
+                if self.grid[i].shape[2:4] != x[i].shape[2:4]:
+                    self.grid[i] = self._make_grid(nx, ny).to(x[i].device)
 
-                y = x[i].sigmoid()
-                if self.inplace:
-                    y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
-                    y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
-                else:  # for YOLOv5 on AWS Inferentia https://github.com/ultralytics/yolov5/pull/2953
-                    xy, wh, conf = y.tensor_split((2, 4), 4)
-                    xy = (xy * 2 - 0.5 + self.grid[i]) * self.stride[i]  # xy
-                    wh = (wh * 2) ** 2 * self.anchor_grid[i]  # wh
-                    y = torch.cat((xy, wh, conf), 4)
+                y = torch.full_like(x[i], 0)
+                class_range = list(range(5)) + list(range(17, 17 + self.nc))
+                y[..., class_range] = x[i][..., class_range].sigmoid()
+                y[..., 5:17] = x[i][..., 5:17]
+                y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i].to(x[i].device)) * self.stride[i]  # xy
+                y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
+                y[..., 5:7] = y[..., 5:7] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x1 y1
+                y[..., 7:9] = y[..., 7:9] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x2 y2
+                y[..., 9:11] = y[..., 9:11] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x3 y3
+                y[..., 11:13] = y[..., 11:13] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x4 y4
+                y[..., 13:15] = y[..., 13:15] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x5 y5
+                y[..., 15:17] = y[..., 15:17] * self.anchor_grid[i] + self.grid[i].to(x[i].device) * self.stride[
+                    i]  # landmark x6 y6
                 z.append(y.view(bs, -1, self.no))
 
         return x if self.training else (torch.cat(z, 1), x)
 
-    def _make_grid(self, nx=20, ny=20, i=0):
+    @staticmethod
+    def _make_grid(nx=20, ny=20):
+        yv, xv = torch.meshgrid([torch.arange(ny), torch.arange(nx)])
+        return torch.stack((xv, yv), 2).view((1, 1, ny, nx, 2)).float()
+
+    def _make_grid_new(self, nx=20, ny=20, i=0):
         d = self.anchors[i].device
-        shape = 1, self.na, ny, nx, 2  # grid shape
-        if check_version(torch.__version__, '1.10.0'):  # torch>=1.10.0 meshgrid workaround for torch>=0.7 compatibility
-            yv, xv = torch.meshgrid(torch.arange(ny).to(d), torch.arange(nx).to(d), indexing='ij')
+        if '1.10.0' in torch.__version__:  # torch>=1.10.0 meshgrid workaround for torch>=0.7 compatibility
+            yv, xv = torch.meshgrid([torch.arange(ny).to(d), torch.arange(nx).to(d)], indexing='ij')
         else:
-            yv, xv = torch.meshgrid(torch.arange(ny, device=d), torch.arange(nx, device=d))
-        grid = torch.stack((xv, yv), 2).expand(shape).float()
-        anchor_grid = (self.anchors[i] * self.stride[i]).view((1, self.na, 1, 1, 2)).expand(shape).float()
+            yv, xv = torch.meshgrid([torch.arange(ny).to(d), torch.arange(nx).to(d)])
+        grid = torch.stack((xv, yv), 2).expand((1, self.na, ny, nx, 2)).float()
+        anchor_grid = (self.anchors[i].clone() * self.stride[i]).view((1, self.na, 1, 1, 2)).expand(
+            (1, self.na, ny, nx, 2)).float()
         return grid, anchor_grid
 
 

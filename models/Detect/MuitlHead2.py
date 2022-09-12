@@ -26,8 +26,9 @@ class Decouple(nn.Module):
     # Decoupled convolution
     def __init__(self, c1, nc=80, na=3):  # ch_in, num_classes, num_anchors
         super().__init__()
-        # c_=c1
-        c_ = min(c1, 256)  # min(c1, nc * na)
+        c_ = 128
+        c1 = 128
+        # c_ = min(c1, 256)  # min(c1, nc * na)
         # c_ = min(c1, 128)  # min(c1, nc * na)
         self.na = na  # number of anchors
         self.nc = nc  # number of classes
@@ -206,6 +207,7 @@ class Decoupled_Detect(nn.Module):
         self.register_buffer('anchors', torch.tensor(anchors).float().view(self.nl, -1, 2))  # shape(nl,na,2)
         self.m = nn.ModuleList(Decouple(x, self.nc, self.na) for x in ch)
         self.inplace = inplace  # use in-place ops (e.g. slice assignment)
+
     # def __init__(self, c1, nc=80, na=3):  # ch_in, num_classes, num_anchors
     # ------------sly
     def forward(self, x):

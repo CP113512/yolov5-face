@@ -175,7 +175,8 @@ class Model(nn.Module):
             self.yaml['nc'] = nc  # override yaml value
         self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch])  # model, savelist
         self.names = [str(i) for i in range(self.yaml['nc'])]  # default names
-        # print([x.shape for x in self.forward(torch.zeros(1, ch, 64, 64))])
+        # print([x.shape for x in self.forward(torch.zeros(1, ch, 64, 64))]) ---sly
+        self.inplace = self.yaml.get('inplace', True)
 
         # Build strides, anchors
         m = self.model[-1]  # Detect()
@@ -194,26 +195,43 @@ class Model(nn.Module):
         #     m.initialize_biases()  # only run once
         #     self.model_type = 'yolox'
         #     self.loss_category = ComputeXLoss  # use ComputeXLoss
-        elif isinstance(m, Decoupled_Detect) or isinstance(m, ASFF_Detect) or isinstance(m, ASFF_Detect4):
-            s = 256 # 2x min stride
-            # m.inplace = self.inplace
-            m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward
+        elif isinstance(m, ASFF_Detect) or isinstance(m, ASFF_Detect4):
+            s = 256  # 2x min stride
+            m.inplace = self.inplace
+            forward = lambda x: self.forward(x)
+            # print()
+            m.stride = torch.tensor([s / x.shape[-2] for x in forward(torch.zeros(1, ch, s, s))])  # forward
+            check_anchor_order(m)  # must be in pixel-space (not grid-space)
             m.anchors /= m.stride.view(-1, 1, 1)
-            check_anchor_order(m)
             self.stride = m.stride
-            try:
-                self._initialize_biases()  # only run once
-                LOGGER.info('initialize_biases done')
-            except:
-                LOGGER.info('decoupled no biase ')
-        if isinstance(m, IDetect):
+            self._initialize_biases()  # only run once
+            # s = 256 # 2x min stride
+            # m.inplace = self.inplace
+            # m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward
+            # m.anchors /= m.stride.view(-1, 1, 1)
+            # check_anchor_order(m)
+            # self.stride = m.stride
+            # try:
+            #     self._initialize_biases()  # only run once
+            #     LOGGER.info('initialize_biases done')
+            # except:
+            #     LOGGER.info('decoupled no biase ')
+        elif isinstance(m, Decoupled_Detect):
+            s = 128  # 2x min stride
+            m.inplace = self.inplace
+            m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.empty(1, ch, s, s))])  # forward
+            check_anchor_order(m)  # must be in pixel-space (not grid-space)
+            m.anchors /= m.stride.view(-1, 1, 1)
+            self.stride = m.stride
+            self._initialize_dh_biases()  # only run once
+        elif isinstance(m, IDetect):
             s = 256  # 2x min stride
             m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward
             m.anchors /= m.stride.view(-1, 1, 1)
             check_anchor_order(m)
             self.stride = m.stride
             self._initialize_biases()  # only run once
-        if isinstance(m, IAuxDetect):
+        elif isinstance(m, IAuxDetect):
             s = 256  # 2x min stride
             m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))[:4]])  # forward
             # print(m.stride)
@@ -244,10 +262,13 @@ class Model(nn.Module):
                 elif fi == 3:
                     yi[..., 0] = img_size[1] - yi[..., 0]  # de-flip lr
                 y.append(yi)
+            y = self._clip_augmented(y)  # clip augmented tails----sly
             return torch.cat(y, 1), None  # augmented inference, train
-        else:
-            # return self.forward_once(x, profile)  # single-scale inference, train
-            return self.forward_once(x, profile, visualize)
+        # else: ---sly
+        #     # return self.forward_once(x, profile)  # single-scale inference, train  -------sly
+        #     return self.forward_once(x, profile, visualize)
+
+        return self.forward_once(x, profile, visualize)
 
     def forward_once(self, x, profile=False, visualize=False):
     # def forward_once(self, x, profile=False):
@@ -257,12 +278,14 @@ class Model(nn.Module):
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
 
             if profile:
-                o = thop.profile(m, inputs=(x,), verbose=False)[0] / 1E9 * 2 if thop else 0  # FLOPS
-                t = time_synchronized()
-                for _ in range(10):
-                    _ = m(x)
-                dt.append((time_synchronized() - t) * 100)
-                print('%10.1f%10.0f%10.1fms %-40s' % (o, m.np, dt[-1], m.type))
+                # ----sly
+                self._profile_one_layer(m, x, dt)
+                # o = thop.profile(m, inputs=(x,), verbose=False)[0] / 1E9 * 2 if thop else 0  # FLOPS
+                # t = time_synchronized()
+                # for _ in range(10):
+                #     _ = m(x)
+                # dt.append((time_synchronized() - t) * 100)
+                # print('%10.1f%10.0f%10.1fms %-40s' % (o, m.np, dt[-1], m.type))
 
             x = m(x)  # run
             y.append(x if m.i in self.save else None)  # save output
@@ -282,19 +305,47 @@ class Model(nn.Module):
             #     print(m.type, m.i)
             #     feature_visualization(x, m.type, m.i)
 
-        if profile:
-            print('%.1fms total' % sum(dt))
+        # if profile:
+        #     print('%.1fms total' % sum(dt))
         return x
 
+    # def _initialize_biases(self, cf=None):  # initialize biases into Detect(), cf is class frequency
+    #     # https://arxiv.org/abs/1708.02002 section 3.3
+    #     # cf = torch.bincount(torch.tensor(np.concatenate(dataset.labels, 0)[:, 0]).long(), minlength=nc) + 1.
+    #     m = self.model[-1]  # Detect() module
+    #     for mi, s in zip(m.m, m.stride):  # from
+    #         b = mi.bias.view(m.na, -1)  # conv.bias(255) to (3,85)
+    #         b.data[:, 4] += math.log(8 / (640 / s) ** 2)  # obj (8 objects per 640 image)
+    #         b.data[:, 5:] += math.log(0.6 / (m.nc - 0.99)) if cf is None else torch.log(cf / cf.sum())  # cls
+    #         mi.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
     def _initialize_biases(self, cf=None):  # initialize biases into Detect(), cf is class frequency
         # https://arxiv.org/abs/1708.02002 section 3.3
         # cf = torch.bincount(torch.tensor(np.concatenate(dataset.labels, 0)[:, 0]).long(), minlength=nc) + 1.
         m = self.model[-1]  # Detect() module
         for mi, s in zip(m.m, m.stride):  # from
-            b = mi.bias.view(m.na, -1)  # conv.bias(255) to (3,85)
-            b.data[:, 4] += math.log(8 / (640 / s) ** 2)  # obj (8 objects per 640 image)
-            b.data[:, 5:] += math.log(0.6 / (m.nc - 0.99)) if cf is None else torch.log(cf / cf.sum())  # cls
+            b = mi.bias.view(m.na, -1).detach()  # conv.bias(255) to (3,85)
+            b[:, 4] += math.log(8 / (640 / s) ** 2)  # obj (8 objects per 640 image)
+            b[:, 5:] += math.log(0.6 / (m.nc - 0.999999)) if cf is None else torch.log(cf / cf.sum())  # cls
             mi.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
+
+    def _initialize_dh_biases(self, cf=None):  # initialize biases into Detect(), cf is class frequency
+        # https://arxiv.org/abs/1708.02002 section 3.3
+        # cf = torch.bincount(torch.tensor(np.concatenate(dataset.labels, 0)[:, 0]).long(), minlength=nc) + 1.
+        m = self.model[-1]  # Detect() module
+        for mi, s in zip(m.m, m.stride):  # from
+            # reg_bias = mi.reg_preds.bias.view(m.na, -1).detach()
+            # reg_bias += math.log(8 / (640 / s) ** 2)
+            # mi.reg_preds.bias = torch.nn.Parameter(reg_bias.view(-1), requires_grad=True)
+
+            # cls_bias = mi.cls_preds.bias.view(m.na, -1).detach()
+            # cls_bias += math.log(0.6 / (m.nc - 0.999999)) if cf is None else torch.log(cf / cf.sum())  # cls
+            # mi.cls_preds.bias = torch.nn.Parameter(cls_bias.view(-1), requires_grad=True)
+            b = mi.b3.bias.view(m.na, -1)
+            b.data[:, 4] += math.log(8 / (640 / s) ** 2)  # obj (8 objects per 640 image)
+            mi.b3.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
+            b = mi.c3.bias.data
+            b += math.log(0.6 / (m.nc - 0.999999)) if cf is None else torch.log(cf / cf.sum())  # cls
+            mi.c3.bias = torch.nn.Parameter(b, requires_grad=True)
 
     def _print_biases(self):
         m = self.model[-1]  # Detect() module
@@ -377,12 +428,23 @@ class Model(nn.Module):
         self = super()._apply(fn)
         m = self.model[-1]  # Detect()
         # if isinstance(m, Detect) or isinstance(m, ASFF_Detect) or isinstance(m, Decoupled_Detect):
-        if isinstance(m, ASFF_Detect) or isinstance(m, Decoupled_Detect) or isinstance(m, ASFF_Detect4):
+        if isinstance(m, Detect) or isinstance(m, ASFF_Detect) or isinstance(m, Decoupled_Detect) or isinstance(m, ASFF_Detect4):
             m.stride = fn(m.stride)
             m.grid = list(map(fn, m.grid))
             if isinstance(m.anchor_grid, list):
                 m.anchor_grid = list(map(fn, m.anchor_grid))
         return self
+
+    def _clip_augmented(self, y):
+        # Clip YOLOv5 augmented inference tails
+        nl = self.model[-1].nl  # number of detection layers (P3-P5)
+        g = sum(4 ** x for x in range(nl))  # grid points
+        e = 1  # exclude layer count
+        i = (y[0].shape[1] // g) * sum(4 ** x for x in range(e))  # indices
+        y[0] = y[0][:, :-i]  # large
+        i = (y[-1].shape[1] // g) * sum(4 ** (nl - 1 - x) for x in range(e))  # indices
+        y[-1] = y[-1][:, i:]  # small
+        return y
 
 
 def parse_model(d, ch):  # model_dict, input_channels(3)
