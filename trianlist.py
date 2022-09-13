@@ -73,3 +73,50 @@
 
 # 卷积
 # python train.py --cfg models/hub_sly2/yolov5s-involution.yaml --name s-involution;###########
+
+# wandb sync C:\Users\shuailuyu\yolov5-face\wandb\offline-run-20220912_202128-1xo8365g
+
+# python train.py --cfg models/hub_sly/yolov5s-BoTNet.yaml --name s_BoTNet --device 0;
+# python train.py --cfg models/hub_sly2/yolov5s-bot.yaml --name s-bot --device 1;
+# python train.py --cfg models/hub_sly/yolov5s-transformer.yaml --name s_c3tr --device 0;
+# python train.py --cfg models/hub_sly/yolov5s-GAMAttention.yaml --name s_GAMAttention --device 1;
+# python train.py --cfg models/hub_sly/yolov5s-S2Attention.yaml --name s_S2Attention --device 0;
+# python train.py --cfg models/hub_sly/yolov5s-SKAttention.yaml --name s_SKAttention --device 1;
+# python train.py --cfg models/hub_sly/yolov5s-C3HB.yaml  --name s_C3HB --device 0;
+# python train.py --cfg models/hub_sly2/yolov5s-4-CBAM-TPH-BiFPN.yaml --name s-4-CBAM-TPH-BiFPN --device 1;
+# python train.py --cfg models/hub_sly2/yolov5s-bifpn.yaml --name s-bifpn --device 0;
+
+
+# python train.py --cfg models/hub_sly/yolov5s-BoTNet.yaml --name s_BoTNet --device 0; python train.py --cfg models/hub_sly2/yolov5s-bot.yaml --name s-bot --device 1;python train.py --cfg models/hub_sly/yolov5s-transformer.yaml --name s_c3tr --device 0;python train.py --cfg models/hub_sly/yolov5s-GAMAttention.yaml --name s_GAMAttention --device 1;python train.py --cfg models/hub_sly/yolov5s-S2Attention.yaml --name s_S2Attention --device 0;python train.py --cfg models/hub_sly/yolov5s-SKAttention.yaml --name s_SKAttention --device 1;python train.py --cfg models/hub_sly/yolov5s-C3HB.yaml  --name s_C3HB --device 0;python train.py --cfg models/hub_sly2/yolov5s-4-CBAM-TPH-BiFPN.yaml --name s-4-CBAM-TPH-BiFPN --device 1;python train.py --cfg models/hub_sly2/yolov5s-bifpn.yaml --name s-bifpn --device 0;
+
+
+# ********************************************
+
+# python train.py --cfg models/hub_sly3/yolov5s-c3tr-cC3HB.yaml --name s-c3tr-cC3HB;
+# python train.py --cfg models/hub_sly3/yolov5s-c3tr-cC3HBc.yaml --name s-c3tr-cC3HBc;
+# python train.py --cfg models/hub_sly3/yolov5s-c3tr-ccc.yaml --name s-c3tr-ccc;
+# python train.py --cfg models/hub_sly3/yolov5s-GAM-cC3HB.yaml --name s-GAM-cC3HB;
+# python train.py --cfg models/hub_sly3/yolov5s-GAM-cC3HBc.yaml --name s-GAM-cC3HBc;
+# python train.py --cfg models/hub_sly3/yolov5s-GAM-ccc.yaml --name s-GAM-ccc;
+# python train.py --cfg models/hub_sly3/yolov5s-bot-cC3HB.yaml --name s-bot-cC3HB;
+# python train.py --cfg models/hub_sly3/yolov5s-bot-cC3HBc.yaml --name s-bot-cC3HBc;
+# python train.py --cfg models/hub_sly3/yolov5s-bot-ccc.yaml --name s-bot-ccc;
+# python train.py --cfg models/hub_sly3/yolov5s-4-bot-carafec.yaml --name s-4-bot-carafec;
+# python train.py --cfg models/hub_sly3/yolov5s-4-bot-carafec3c.yaml --name s-4-bot-carafec3c;
+# python train.py --cfg models/hub_sly3/yolov5s-4-c3tr-carafec.yaml --name s-4-c3tr-carafec;
+# python train.py --cfg models/hub_sly3/yolov5s-4-c3tr-carafec3c.yaml --name s-4-c3tr-carafec3c;
+# python train.py --cfg models/hub_sly3/yolov5s-4-GAM-carafec.yaml --name s-4-GAM-carafec;
+# python train.py --cfg models/hub_sly3/yolov5s-4-GAM-carafec3c.yaml --name s-4-GAM-carafec3c;
+# python train.py --cfg models/hub_sly3/yolov5s-4-bot-carafe.yaml --name s-4-bot-carafe;
+# python train.py --cfg models/hub_sly3/yolov5s-4-c3tr-carafe.yaml --name s-4-c3tr-carafe;
+# python train.py --cfg models/hub_sly3/yolov5s-4-c3tr-GAM-carafe.yaml --name s-4-c3tr-GAM-carafe;
+# python train.py --cfg models/hub_sly3/yolov5s-4-GAM-carafe.yaml --name s-4-GAM-carafe;
+# python train.py --cfg models/hub_sly3/yolov5s-c3tr-GAM-cC3HB.yaml --name s-c3tr-GAM-cC3HB;
+# python train.py --cfg models/hub_sly3/yolov5s-c3tr-GAM-cC3HBc.yaml --name s-c3tr-GAM-cC3HBc;
+# python train.py --cfg models/hub_sly3/yolov5s-c3tr-GAM-ccc.yaml --name s-c3tr-GAM-ccc;
+
+# ********************************************
+
+# python train.py --cfg
+# python train.py --cfg
+# python train.py --cfg
