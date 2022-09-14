@@ -68,7 +68,9 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     # Configure
     plots = not opt.evolve  # create plots
     cuda = device.type != 'cpu'
-    init_seeds(2 + rank)
+    # ----------sly
+    # init_seeds(2 + rank)
+    init_seeds(opt.seed + 1 + rank, deterministic=True)
     with open(opt.data,encoding='UTF-8') as f:
         data_dict = yaml.load(f, Loader=yaml.FullLoader)  # data dict
     with torch_distributed_zero_first(rank):
@@ -138,7 +140,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     if wandb and wandb.run is None:
         opt.hyp = hyp  # add hyperparameters
         wandb_run = wandb.init(config=opt, resume="allow",
-                               project='yolo-cpslyfinal3',
+                               project='yolo-cpslyfinal4',
                                entity='cp-sly',
                                # project='hhh',
                                # entity='slyteagirl',

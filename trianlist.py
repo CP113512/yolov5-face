@@ -91,7 +91,8 @@
 
 
 # ********************************************
-
+# python train.py --cfg models/hub_sly/yolov5s.yaml --name ss --device 0;
+# python train.py --cfg models/hub_sly/yolov5s-face.yaml --name s_faces;
 # python train.py --cfg models/hub_sly3/yolov5s-c3tr-cC3HB.yaml --name s-c3tr-cC3HB;
 # python train.py --cfg models/hub_sly3/yolov5s-c3tr-cC3HBc.yaml --name s-c3tr-cC3HBc;
 # python train.py --cfg models/hub_sly3/yolov5s-c3tr-ccc.yaml --name s-c3tr-ccc;

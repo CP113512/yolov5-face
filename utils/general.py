@@ -104,12 +104,24 @@ class Profile(contextlib.ContextDecorator):
             torch.cuda.synchronize()
         return time.time()
 
-
-def init_seeds(seed=0):
-    # Initialize random number generator (RNG) seeds
+def init_seeds(seed=0, deterministic=False):
+    # Initialize random number generator (RNG) seeds https://pytorch.org/docs/stable/notes/randomness.html
     random.seed(seed)
     np.random.seed(seed)
-    init_torch_seeds(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # for Multi-GPU, exception safe
+    torch.backends.cudnn.benchmark = True  # for faster training
+    if deterministic and check_version(torch.__version__, '1.12.0'):  # https://github.com/ultralytics/yolov5/pull/8213
+        torch.use_deterministic_algorithms(True)
+        torch.backends.cudnn.deterministic = True
+        os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
+        os.environ['PYTHONHASHSEED'] = str(seed)
+# def init_seeds(seed=0):
+#     # Initialize random number generator (RNG) seeds
+#     random.seed(seed)
+#     np.random.seed(seed)
+#     init_torch_seeds(seed)
 
 
 def get_latest_run(search_dir='.'):
