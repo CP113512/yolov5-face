@@ -36,7 +36,7 @@ from utils.plots import plot_images, plot_labels, plot_results, plot_evolution
 from utils.torch_utils import ModelEMA, select_device, intersect_dicts, torch_distributed_zero_first
 
 logger = logging.getLogger(__name__)
-os.environ['WANDB_MODE'] = 'offline'
+# os.environ['WANDB_MODE'] = 'offline'
 
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
@@ -480,6 +480,7 @@ if __name__ == '__main__':
     parser.add_argument('--project', default=r"runs/train", help='save to project/name') #'runs/train' D:\帅璐宇\Tea\result\runs\train
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
+    parser.add_argument('--seed', type=int, default=0, help='Global training seed')
     # -----------------------sly
     # parser.add_argument('--swin', half=not opt.swin, help='useswin')
     parser.add_argument('--acmix', action='store_true', help='useacmix')
